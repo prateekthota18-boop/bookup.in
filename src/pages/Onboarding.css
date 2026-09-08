@@ -1,0 +1,273 @@
+/* ============================================
+   BookUp — Onboarding Styles
+   ============================================ */
+
+.onb-page {
+  min-height: 100vh;
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+}
+
+.onb-container {
+  width: 100%;
+  max-width: 560px;
+}
+
+.onb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.onb-step-counter {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  font-weight: var(--font-weight-medium);
+}
+
+.onb-progress {
+  height: 3px;
+  background: var(--color-gray-200);
+  border-radius: var(--radius-full);
+  margin-bottom: var(--space-10);
+  overflow: hidden;
+}
+
+.onb-progress-bar {
+  height: 100%;
+  background: var(--color-primary-600);
+  border-radius: var(--radius-full);
+  transition: width var(--transition-smooth);
+}
+
+.onb-content {
+  min-height: 360px;
+}
+
+.onb-step h2 {
+  font-size: var(--font-size-2xl);
+  margin-bottom: var(--space-2);
+}
+
+.onb-step > p {
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-6);
+}
+
+.onb-step .form-group {
+  margin-bottom: var(--space-4);
+}
+
+.onb-input-lg {
+  font-size: var(--font-size-lg) !important;
+  padding: var(--space-3) var(--space-4) !important;
+}
+
+.onb-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-10);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Avatar section */
+.onb-avatar-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+
+.onb-avatar-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+/* Service preview */
+.onb-service-preview {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-primary-50);
+  border: 1px solid var(--color-primary-200);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+  color: var(--color-primary-700);
+  margin-top: var(--space-4);
+}
+
+/* Availability */
+.onb-availability {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.onb-day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.onb-day-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  min-width: 100px;
+}
+
+.onb-time-range {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.onb-time-input {
+  width: 120px !important;
+  padding: var(--space-1) var(--space-2) !important;
+  font-size: var(--font-size-sm) !important;
+}
+
+.onb-unavailable {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+/* Input with unit */
+.onb-input-with-unit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.onb-input-with-unit .form-input {
+  width: 120px;
+}
+
+.onb-unit {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+/* Policy preview */
+.onb-policy-preview {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  margin-top: var(--space-4);
+}
+
+/* Reminders */
+.onb-reminder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.onb-reminder-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.onb-reminder-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+.onb-reminder-desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
+}
+
+/* WhatsApp preview */
+.onb-whatsapp-preview {
+  margin-top: var(--space-6);
+}
+
+.wa-preview-badge {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+  margin-bottom: var(--space-2);
+}
+
+.wa-preview-msg {
+  background: #DCF8C6;
+  border-radius: 0 8px 8px 8px;
+  padding: var(--space-3) var(--space-4);
+  max-width: 320px;
+  font-size: var(--font-size-sm);
+  box-shadow: var(--shadow-xs);
+}
+
+/* Completion */
+.onb-completion {
+  text-align: center;
+  max-width: 480px;
+}
+
+.onb-completion-icon {
+  font-size: 3rem;
+  margin-bottom: var(--space-4);
+}
+
+.onb-completion h2 {
+  font-size: var(--font-size-2xl);
+  margin-bottom: var(--space-2);
+}
+
+.onb-completion > p {
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-6);
+}
+
+.onb-link-display {
+  background: var(--color-gray-50);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-5);
+  margin-bottom: var(--space-8);
+  display: inline-block;
+}
+
+.onb-link-url {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-md);
+  color: var(--color-primary-600);
+  font-weight: var(--font-weight-medium);
+}
+
+.onb-completion-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .onb-day-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+  .onb-time-input {
+    width: 100px !important;
+  }
+}
