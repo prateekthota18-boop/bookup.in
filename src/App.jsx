@@ -24,6 +24,7 @@ import Settings from './pages/dashboard/Settings';
 
 // Booking
 import PublicBookingPage from './pages/booking/BookingPage';
+import CustomerBooking from './pages/booking/CustomerBooking';
 
 // Styles
 import './styles/global.css';
@@ -31,8 +32,42 @@ import './styles/components.css';
 
 function ProtectedRoute({ children }) {
   const auth = useAuth();
+  if (auth.loading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--color-bg-subtle, #f8fafc)'
+      }}>
+        <div className="spinner" />
+      </div>
+    );
+  }
   if (!auth.isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+  return children;
+}
+
+function AuthRoute({ children }) {
+  const auth = useAuth();
+  if (auth.loading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--color-bg-subtle, #f8fafc)'
+      }}>
+        <div className="spinner" />
+      </div>
+    );
+  }
+  if (auth.isAuthenticated && !auth.isDemoMode) {
+    return <Navigate to="/dashboard" replace />;
   }
   return children;
 }
@@ -42,12 +77,17 @@ function AppRoutes() {
     <Routes>
       {/* Public routes */}
       <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
+      <Route path="/signup" element={<AuthRoute><Signup /></AuthRoute>} />
+      <Route path="/onboarding" element={
+        <ProtectedRoute>
+          <Onboarding />
+        </ProtectedRoute>
+      } />
 
-      {/* Public booking page */}
+      {/* Public booking page & Customer management */}
       <Route path="/book/:slug" element={<PublicBookingPage />} />
+      <Route path="/booking/:id" element={<CustomerBooking />} />
 
       {/* Dashboard (protected) */}
       <Route path="/dashboard" element={

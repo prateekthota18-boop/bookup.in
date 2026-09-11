@@ -13,11 +13,27 @@ export function getDayOfWeek(dateStr) {
 }
 
 /**
- * Convert "HH:mm" time string to minutes from midnight
+ * Convert "HH:mm" or "hh:mm AM/PM" time string to minutes from midnight
  */
 export function timeToMinutes(timeStr) {
   if (!timeStr) return 0;
-  const [h, m] = timeStr.split(':').map(Number);
+  if (typeof timeStr !== 'string') return Number(timeStr) || 0;
+
+  const clean = timeStr.trim();
+  const isPm = /pm/i.test(clean);
+  const isAm = /am/i.test(clean);
+
+  const match = clean.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return 0;
+
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+
+  if (isPm) {
+    if (h < 12) h += 12;
+  } else if (isAm) {
+    if (h === 12) h = 0;
+  }
   return h * 60 + m;
 }
 
@@ -35,34 +51,32 @@ export function minutesToTime(minutes) {
  */
 export function formatTimeAmPm(timeStr) {
   if (!timeStr) return '';
+  if (typeof timeStr === 'string' && (timeStr.includes('AM') || timeStr.includes('PM'))) {
+    return timeStr;
+  }
   const [h, m] = timeStr.split(':').map(Number);
+  if (isNaN(h)) return timeStr;
   const ampm = h >= 12 ? 'PM' : 'AM';
   const hour12 = h % 12 || 12;
-  return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+  return `${hour12}:${String(m || 0).padStart(2, '0')} ${ampm}`;
 }
 
 /**
- * Rebuilt Dynamic Slot Generation Engine
- * 
+ * Central Dynamic Slot Generation Engine
+ *
  * Generates candidate start times stepping by fixed granularity (15 mins)
- * Validates each candidate [T, T + D + B) against:
+ * Validates each candidate [candStart, candEnd) against:
  *  - Confirmed and Completed bookings (accounting for actualEndTime and buffer)
  *  - External calendar busy times (e.g. Google Calendar)
  *  - Minimum notice window (for today)
  *  - Provider closing time (session must finish by day end)
- * 
- * @param {string} start "HH:mm" Day opening time
- * @param {string} end "HH:mm" Day closing time
- * @param {number} duration Service duration in minutes (D)
- * @param {number} buffer Buffer time in minutes (B)
- * @param {Array} existingBookings Bookings on this date
- * @param {Array} blockedTimes External or provider busy intervals [{ start: 'HH:mm', end: 'HH:mm' }]
- * @param {number} minNotice Minimum notice in hours
- * @param {string} dateStr 'YYYY-MM-DD'
- * @param {number} granularity Stepping granularity in minutes (default 15)
- * @returns {Array<string>} Array of available start times ["09:00", "09:15", ...]
+ *
+ * Interval overlap rule:
+ * candidateStart < existingEnd AND candidateEnd > existingStart
+ *
+ * @returns {Array<{time: string, available: boolean, reason?: 'booked'|'unavailable'}>}
  */
-export function generateTimeSlots(
+export function generateTimeSlotsDetailed(
   start,
   end,
   duration,
@@ -71,7 +85,8 @@ export function generateTimeSlots(
   blockedTimes = [],
   minNotice = 0,
   dateStr = null,
-  granularity = 15
+  granularity = 15,
+  excludeBookingId = null
 ) {
   const slots = [];
   const startMin = timeToMinutes(start);
@@ -95,6 +110,10 @@ export function generateTimeSlots(
 
   // Existing bookings
   for (const b of existingBookings) {
+    // Exclude current appointment when rescheduling
+    if (excludeBookingId && b.id === excludeBookingId) {
+      continue;
+    }
     // Cancelled and no-show bookings do not block calendar time
     if (b.status === 'cancelled' || b.status === 'late-cancellation' || b.status === 'no-show') {
       continue;
@@ -114,8 +133,10 @@ export function generateTimeSlots(
 
     // Interval blocked by this existing booking (including buffer)
     blockedIntervals.push({
+      id: b.id,
       start: bStart,
       end: bEnd + bufferNum,
+      exactStart: bStart,
       label: b.serviceName || 'Booking',
     });
   }
@@ -127,14 +148,24 @@ export function generateTimeSlots(
     blockedIntervals.push({
       start: blkStart,
       end: blkEnd,
+      exactStart: blkStart,
       label: blk.title || 'Busy',
     });
   }
 
   // 3. Step through candidate start times with fixed granularity (15 mins)
-  for (let T = startMin; T + durationNum <= endMin; T += granularity) {
+  for (let T = startMin; T < endMin; T += granularity) {
+    const timeStr = minutesToTime(T);
+
+    // If appointment duration exceeds closing time
+    if (T + durationNum > endMin) {
+      slots.push({ time: timeStr, available: false, reason: 'unavailable' });
+      continue;
+    }
+
     // Check minimum notice requirement
     if (minNoticeCutoff !== -1 && T < minNoticeCutoff) {
+      slots.push({ time: timeStr, available: false, reason: 'unavailable' });
       continue;
     }
 
@@ -142,22 +173,61 @@ export function generateTimeSlots(
     const candStart = T;
     const candEnd = T + durationNum + bufferNum;
 
-    // Check collision with any blocked interval
-    // Two intervals [A1, A2) and [B1, B2) overlap iff max(A1, B1) < min(A2, B2)
-    let hasConflict = false;
+    // Check collision with any blocked interval:
+    // candidateStart < existingEnd AND candidateEnd > existingStart -> CONFLICT
+    let isBlocked = false;
+    let blockReason = 'unavailable';
+
     for (const interval of blockedIntervals) {
-      if (Math.max(candStart, interval.start) < Math.min(candEnd, interval.end)) {
-        hasConflict = true;
+      if (candStart < interval.end && candEnd > interval.start) {
+        isBlocked = true;
+        if (interval.exactStart !== undefined && interval.exactStart === candStart) {
+          blockReason = 'booked';
+        } else {
+          blockReason = 'unavailable';
+        }
         break;
       }
     }
 
-    if (!hasConflict) {
-      slots.push(minutesToTime(T));
+    if (isBlocked) {
+      slots.push({ time: timeStr, available: false, reason: blockReason });
+    } else {
+      slots.push({ time: timeStr, available: true });
     }
   }
 
   return slots;
+}
+
+/**
+ * Returns available start time strings ["09:00", "09:15", ...]
+ */
+export function generateTimeSlots(
+  start,
+  end,
+  duration,
+  buffer = 0,
+  existingBookings = [],
+  blockedTimes = [],
+  minNotice = 0,
+  dateStr = null,
+  granularity = 15,
+  excludeBookingId = null
+) {
+  const detailed = generateTimeSlotsDetailed(
+    start,
+    end,
+    duration,
+    buffer,
+    existingBookings,
+    blockedTimes,
+    minNotice,
+    dateStr,
+    granularity,
+    excludeBookingId
+  );
+  return detailed.filter(s => s.available).map(s => s.time);
 }
 
 export function isDateAvailable(dateStr, availability) {
@@ -167,29 +237,30 @@ export function isDateAvailable(dateStr, availability) {
 }
 
 /**
- * Live slot generator for public booking & calendar views
+ * Live slot generator returning full status for public booking & dashboard views
  */
-export function getAvailableTimeSlotsForDate(
+export function getTimeSlotsDetailedForDate(
   dateStr,
   availability,
   services,
   serviceId,
   allBookings = [],
-  calendarBusyTimes = []
+  calendarBusyTimes = [],
+  excludeBookingId = null
 ) {
   if (!availability || !isDateAvailable(dateStr, availability)) return [];
 
   const day = getDayOfWeek(dateStr);
-  const daySchedule = availability.schedule[day];
+  const daySchedule = availability.schedule?.[day];
   if (!daySchedule?.available) return [];
 
   const service = services.find(s => s.id === serviceId);
   if (!service) return [];
 
-  // Filter bookings for this date (confirmed or completed)
+  // Filter bookings for this date
   const dayBookings = allBookings.filter(b => b.date === dateStr);
 
-  return generateTimeSlots(
+  return generateTimeSlotsDetailed(
     daySchedule.start,
     daySchedule.end,
     service.duration,
@@ -198,8 +269,33 @@ export function getAvailableTimeSlotsForDate(
     calendarBusyTimes,
     availability.minNotice ?? 0,
     dateStr,
-    15 // 15-minute stepping granularity
+    15,
+    excludeBookingId
   );
+}
+
+/**
+ * Live available slot generator returning available time strings
+ */
+export function getAvailableTimeSlotsForDate(
+  dateStr,
+  availability,
+  services,
+  serviceId,
+  allBookings = [],
+  calendarBusyTimes = [],
+  excludeBookingId = null
+) {
+  const detailed = getTimeSlotsDetailedForDate(
+    dateStr,
+    availability,
+    services,
+    serviceId,
+    allBookings,
+    calendarBusyTimes,
+    excludeBookingId
+  );
+  return detailed.filter(s => s.available).map(s => s.time);
 }
 
 export function getGreeting() {

@@ -140,7 +140,7 @@ export default function Analytics() {
       </div>
 
       {/* Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)' }}>
+      <div className="analytics-charts-grid">
         <div className="card card-padding">
           <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, marginBottom: 'var(--space-4)' }}>Appointments Trend</h4>
           <div style={{ height: 280 }}>

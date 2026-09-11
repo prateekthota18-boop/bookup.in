@@ -3,13 +3,19 @@
  * Profile, Profile Completeness, Google Calendar, WhatsApp Reminders, and Account
  */
 
-import { useState } from 'react';
-import { useStore, ACTIONS } from '../../data/store';
+import { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useStore } from '../../data/store';
+import { ACTIONS } from '../../data/actions';
 import { getInitials } from '../../utils/helpers';
-import { googleCalendarService } from '../../services/calendar/MockGoogleCalendarProvider';
+import { realGoogleCalendarService } from '../../services/calendar/RealGoogleCalendarProvider';
+import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
+import { dbService } from '../../services/supabase/dbService';
 
 export default function Settings() {
   const { state, dispatch, addToast } = useStore();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const provider = state.provider || {};
   const reminders = state.reminderSettings || {};
   const gcal = state.googleCalendar || { isConnected: false, email: null };
@@ -21,6 +27,44 @@ export default function Settings() {
   const [phone, setPhone] = useState(provider.phone || '');
   const [bioError, setBioError] = useState('');
   const [isConnectingGcal, setIsConnectingGcal] = useState(false);
+
+  // Handle return redirect from Google OAuth callback
+  useEffect(() => {
+    const success = searchParams.get('gcal_success');
+    const gcalEmail = searchParams.get('email');
+    const gcalError = searchParams.get('gcal_error');
+
+    if (success === 'true') {
+      dispatch({
+        type: ACTIONS.CONNECT_GOOGLE_CALENDAR,
+        payload: { email: gcalEmail || 'Connected Google User' },
+      });
+      addToast(`Connected to Google Calendar as ${gcalEmail || 'your account'} ✓`);
+      navigate('/dashboard/settings', { replace: true });
+    } else if (gcalError) {
+      if (gcalError === 'access_denied') {
+        addToast('Google Calendar authorization was cancelled.', 'warning');
+      } else {
+        addToast(`Google connection failed: ${decodeURIComponent(gcalError)}`, 'error');
+      }
+      navigate('/dashboard/settings', { replace: true });
+    }
+  }, [searchParams, dispatch, addToast, navigate]);
+
+  // Synchronize calendar connection state with backend on mount
+  useEffect(() => {
+    const checkServerStatus = async () => {
+      const providerId = provider?.id || 'provider-1';
+      const status = await realGoogleCalendarService.getStatus(providerId);
+      if (status.isConnected && (!gcal.isConnected || gcal.email !== status.email)) {
+        dispatch({
+          type: ACTIONS.CONNECT_GOOGLE_CALENDAR,
+          payload: { email: status.email },
+        });
+      }
+    };
+    checkServerStatus();
+  }, [provider?.id, dispatch, gcal.isConnected, gcal.email]);
 
   // Profile Completeness Calculation
   const hasName = Boolean(name.trim().length >= 2);
@@ -37,12 +81,27 @@ export default function Settings() {
   if (!hasContact) completenessNudges.push('Complete your email & phone contact info');
   if (!hasServices) completenessNudges.push('Add at least one active service');
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     if (bio.trim().length > 0 && bio.trim().length < 20) {
       setBioError('Bio should be at least 20 characters to build trust with clients.');
       return;
     }
     setBioError('');
+
+    if (!state.auth?.isDemoMode && isSupabaseConfigured() && state.provider?.id) {
+      try {
+        await dbService.updateProviderProfile(state.provider.id, {
+          name,
+          businessName,
+          bio,
+          email,
+          phone,
+        });
+      } catch (err) {
+        console.error('Failed to update profile in Supabase:', err);
+      }
+    }
+
     dispatch({ type: ACTIONS.UPDATE_PROVIDER, payload: { name, businessName, bio, email, phone } });
     addToast('Profile updated ✓');
   };
@@ -54,19 +113,18 @@ export default function Settings() {
   const handleConnectGcal = async () => {
     setIsConnectingGcal(true);
     try {
-      const res = await googleCalendarService.connect(email || 'priya.sharma@gmail.com');
-      dispatch({
-        type: ACTIONS.CONNECT_GOOGLE_CALENDAR,
-        payload: { email: res.email },
-      });
-      addToast(`Connected to Google Calendar as ${res.email} ✓`);
-    } finally {
+      const providerId = provider?.id || 'provider-1';
+      await realGoogleCalendarService.connect({ providerId });
+    } catch (err) {
+      console.error('Google OAuth init error:', err);
+      addToast(err.message, 'error');
       setIsConnectingGcal(false);
     }
   };
 
   const handleDisconnectGcal = async () => {
-    await googleCalendarService.disconnect();
+    const providerId = provider?.id || 'provider-1';
+    await realGoogleCalendarService.disconnect(providerId);
     dispatch({ type: ACTIONS.DISCONNECT_GOOGLE_CALENDAR });
     addToast('Google Calendar disconnected');
   };

@@ -3,22 +3,77 @@
  * Mobile-first, one-handed booking flow
  */
 
-import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useStore, ACTIONS, formatCurrency, formatTime, formatDate, generateId } from '../../data/store';
-import { getInitials, getCalendarDays, isDateAvailable, getAvailableTimeSlotsForDate, isPastDate } from '../../utils/helpers';
+import { useState, useMemo, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useStore, formatCurrency, formatTime, formatDate, generateId } from '../../data/store';
+import { ACTIONS } from '../../data/actions';
+import { getInitials, getCalendarDays, isDateAvailable, getTimeSlotsDetailedForDate, isPastDate, isFutureDate } from '../../utils/helpers';
 import { MOCK_GCAL_BUSY_EVENTS } from '../../services/calendar/MockGoogleCalendarProvider';
+import { realGoogleCalendarService } from '../../services/calendar/RealGoogleCalendarProvider';
 import { whatsAppService } from '../../services/notifications/MockWhatsAppProvider';
+import { isDemoSlug, createSeedState } from '../../data/seedData';
+import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
+import { dbService } from '../../services/supabase/dbService';
 import './BookingPage.css';
-
-const STEPS = ['service', 'date', 'time', 'info', 'payment', 'review', 'confirmed'];
 
 export default function PublicBookingPage() {
   const { state, dispatch, addToast } = useStore();
   const navigate = useNavigate();
-  const provider = state.provider;
-  const availability = state.availability;
-  const services = state.services?.filter(s => s.isActive) || [];
+  const { slug } = useParams();
+
+  // Resolve provider from state or demo fallback
+  const isDemo = isDemoSlug(slug);
+  const demoFallback = useMemo(() => (isDemo ? createSeedState(slug) : null), [isDemo, slug]);
+
+  // Supabase public data state
+  const [supabaseData, setSupabaseData] = useState(null);
+  const [isLoadingPublic, setIsLoadingPublic] = useState(!isDemo && isSupabaseConfigured());
+
+  // Fetch live provider, services, availability, bookings from Supabase
+  useEffect(() => {
+    let isMounted = true;
+    if (!isDemo && slug && isSupabaseConfigured()) {
+      dbService.getPublicBookingData(slug).then(data => {
+        if (isMounted) {
+          if (data) setSupabaseData(data);
+          setIsLoadingPublic(false);
+        }
+      }).catch(err => {
+        console.error('Failed to load public booking data from Supabase:', err);
+        if (isMounted) setIsLoadingPublic(false);
+      });
+    }
+    return () => { isMounted = false; };
+  }, [slug, isDemo]);
+
+  // Hydrate store on cold start/incognito or when navigating to a demo provider
+  useEffect(() => {
+    if (isDemo && (!state.provider || state.provider.slug !== slug)) {
+      const seed = createSeedState(slug);
+      const existingBookings = (state.bookings && state.bookings.length > 0) ? state.bookings : seed.bookings;
+      dispatch({
+        type: ACTIONS.LOAD_STATE,
+        payload: { ...seed, bookings: existingBookings }
+      });
+    }
+  }, [slug, isDemo, state.provider, state.bookings, dispatch]);
+
+  const provider = supabaseData?.provider || ((state.provider && state.provider.slug === slug)
+    ? state.provider
+    : (demoFallback ? demoFallback.provider : null));
+
+  const availability = supabaseData?.availability || ((state.provider && state.provider.slug === slug)
+    ? state.availability
+    : (demoFallback ? demoFallback.availability : null));
+
+  const allServices = supabaseData?.services || ((state.provider && state.provider.slug === slug)
+    ? (state.services || [])
+    : (demoFallback ? demoFallback.services : []));
+  const services = allServices.filter(s => s.isActive);
+
+  const policies = supabaseData?.policies || ((state.provider && state.provider.slug === slug)
+    ? state.policies
+    : (demoFallback ? demoFallback.policies : null));
 
   const [step, setStep] = useState('service');
   const [selectedService, setSelectedService] = useState(null);
@@ -36,39 +91,78 @@ export default function PublicBookingPage() {
   const calDays = useMemo(() => getCalendarDays(calYear, calMonth), [calYear, calMonth]);
   const todayStr = today.toISOString().split('T')[0];
 
-  // External calendar busy times (when Google Calendar is connected)
+  // External calendar busy times (live Google Calendar when connected)
+  const [liveGcalBusyTimes, setLiveGcalBusyTimes] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (state.googleCalendar?.isConnected && selectedDate) {
+      const providerId = provider?.id || 'provider-1';
+      realGoogleCalendarService.getBusyTimes(selectedDate, providerId).then(times => {
+        if (isMounted && Array.isArray(times)) {
+          setLiveGcalBusyTimes(times);
+        }
+      });
+    }
+    return () => { isMounted = false; };
+  }, [state.googleCalendar?.isConnected, selectedDate, provider?.id]);
+
   const calendarBusyTimes = useMemo(() => {
     if (!state.googleCalendar?.isConnected || !selectedDate) return [];
+    if (liveGcalBusyTimes.length > 0) return liveGcalBusyTimes;
     const d = new Date(selectedDate + 'T00:00:00');
     const day = d.getDay();
     return MOCK_GCAL_BUSY_EVENTS.filter(e => e.dayOfWeek === day);
-  }, [state.googleCalendar?.isConnected, selectedDate]);
+  }, [state.googleCalendar?.isConnected, selectedDate, liveGcalBusyTimes]);
 
-  // Dynamic slot engine: recomputes per service, dynamic buffer, and live bookings
-  const timeSlots = useMemo(() => {
+  const timeSlotsDetailed = useMemo(() => {
     if (!selectedDate || !selectedService) return [];
-    return getAvailableTimeSlotsForDate(
+    const bookingsToCheck = (supabaseData?.bookings && supabaseData.bookings.length > 0)
+      ? supabaseData.bookings
+      : ((state.bookings && state.bookings.length > 0)
+        ? state.bookings
+        : (demoFallback?.bookings || []));
+    return getTimeSlotsDetailedForDate(
       selectedDate,
       availability,
       services,
       selectedService.id,
-      state.bookings,
+      bookingsToCheck,
       calendarBusyTimes
     );
-  }, [selectedDate, selectedService, availability, services, state.bookings, calendarBusyTimes]);
+  }, [selectedDate, selectedService, availability, services, supabaseData, state.bookings, demoFallback?.bookings, calendarBusyTimes]);
+
+  const timeSlots = useMemo(() => {
+    return timeSlotsDetailed.filter(s => s.available).map(s => s.time);
+  }, [timeSlotsDetailed]);
 
   const service = selectedService;
   const requiresDeposit = service && service.depositAmount > 0;
 
-  // No provider data? Show placeholder
+  if (isLoadingPublic) {
+    return (
+      <div className="booking-page">
+        <div className="booking-container" style={{ textAlign: 'center', padding: 'var(--space-12) var(--space-6)' }}>
+          <h3 style={{ fontSize: 'var(--font-size-lg)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)' }}>
+            Loading booking page...
+          </h3>
+          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-tertiary)' }}>Please wait</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Unknown or missing provider? Show polished not found screen
   if (!provider) {
     return (
       <div className="booking-page">
         <div className="booking-container">
-          <div className="booking-empty">
-            <div style={{ fontSize: '2rem', marginBottom: 12 }}>🔗</div>
-            <h3>Booking page not found</h3>
-            <p>This booking page doesn't exist or hasn't been set up yet.</p>
+          <div className="booking-empty" style={{ textAlign: 'center', padding: 'var(--space-12) var(--space-6)' }}>
+            <div style={{ fontSize: '3rem', marginBottom: 'var(--space-3)' }}>🔗</div>
+            <h3 style={{ fontSize: 'var(--font-size-xl)', marginBottom: 'var(--space-2)' }}>Booking page not found</h3>
+            <p style={{ color: 'var(--color-text-secondary)', maxWidth: 380, margin: '0 auto var(--space-6)', lineHeight: 1.5 }}>
+              The booking link <strong>/book/{slug}</strong> doesn't exist or hasn't been set up yet.
+            </p>
             <button className="btn btn-primary" onClick={() => navigate('/')}>Go to BookUp</button>
           </div>
         </div>
@@ -107,15 +201,59 @@ export default function PublicBookingPage() {
     setTimeout(() => setStep('review'), 800);
   };
 
-  const handleConfirmBooking = () => {
+  const handleConfirmBooking = async () => {
     if (!policyAgreed) return;
 
+    if (!timeSlots.includes(selectedTime)) {
+      addToast('Selected time slot is no longer available. Please choose another slot.', 'error');
+      setStep('time');
+      return;
+    }
+
+    const service = selectedService;
     const [h, m] = selectedTime.split(':').map(Number);
     const endMinutes = h * 60 + m + service.duration;
     const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
 
+    let realBookingId = generateId('booking');
+    let authoritativePrice = service.price;
+    let authoritativeDeposit = service.depositAmount;
+
+    // Real Supabase persistence & authoritative double-booking protection
+    if (!isDemo && isSupabaseConfigured() && provider?.id) {
+      try {
+        const result = await dbService.createBookingAtomic({
+          providerId: provider.id,
+          serviceId: service.id,
+          customerName: customerInfo.name.trim(),
+          customerEmail: customerInfo.email?.trim() || '',
+          customerPhone: customerInfo.phone.trim(),
+          customerWhatsApp: customerInfo.whatsapp?.trim() || customerInfo.phone.trim(),
+          bookingDate: selectedDate,
+          startTime: selectedTime,
+          notes: '',
+        });
+
+        if (result?.bookingId) {
+          realBookingId = result.bookingId;
+        }
+        if (result?.price !== undefined) authoritativePrice = result.price;
+        if (result?.depositAmount !== undefined) authoritativeDeposit = result.depositAmount;
+      } catch (err) {
+        console.error('Booking creation error:', err);
+        addToast(err.message || 'Failed to create booking. Please select another slot.', 'error');
+        // Refresh live bookings to update slots
+        if (slug) {
+          dbService.getPublicBookingData(slug).then(d => {
+            if (d) setSupabaseData(d);
+          });
+        }
+        return;
+      }
+    }
+
     const booking = {
-      id: generateId('booking'),
+      id: realBookingId,
       providerId: provider.id,
       serviceId: service.id,
       serviceName: service.name,
@@ -128,8 +266,8 @@ export default function PublicBookingPage() {
       startTime: selectedTime,
       endTime,
       duration: service.duration,
-      price: service.price,
-      depositAmount: service.depositAmount,
+      price: authoritativePrice,
+      depositAmount: authoritativeDeposit,
       depositStatus: requiresDeposit ? 'paid' : 'na',
       status: 'confirmed',
       source: 'BookUp booking page',
@@ -148,6 +286,24 @@ export default function PublicBookingPage() {
     dispatch({ type: ACTIONS.ADD_BOOKING, payload: { booking, customer } });
     setConfirmedBooking(booking);
     setStep('confirmed');
+
+    // Sync event to provider's Google Calendar if connected
+    if (state.googleCalendar?.isConnected) {
+      const providerId = provider?.id || 'provider-1';
+      realGoogleCalendarService.createEvent(booking, providerId).then(gRes => {
+        if (gRes?.success && gRes.eventId) {
+          dispatch({
+            type: ACTIONS.UPDATE_BOOKING,
+            payload: {
+              id: booking.id,
+              googleEventId: gRes.eventId,
+              googleEventLink: gRes.htmlLink,
+              syncedToGoogleCalendar: true,
+            },
+          });
+        }
+      });
+    }
   };
 
   const goBack = () => {
@@ -240,7 +396,8 @@ export default function PublicBookingPage() {
               </div>
               <div className="cal-days">
                 {calDays.map((d, i) => {
-                  const isAvailable = d.isCurrentMonth && d.date && !isPastDate(d.date) && isDateAvailable(d.date, availability);
+                  const maxDays = availability?.maxAdvanceBooking ?? 30;
+                  const isAvailable = d.isCurrentMonth && d.date && !isPastDate(d.date) && isFutureDate(d.date, maxDays) && isDateAvailable(d.date, availability);
                   const isSelected = d.date === selectedDate;
                   const isTodayDate = d.date === todayStr;
                   return (
@@ -267,15 +424,22 @@ export default function PublicBookingPage() {
               {service.name} · {formatDate(selectedDate)}
             </div>
 
-            {timeSlots.length > 0 ? (
+            {timeSlotsDetailed.length > 0 ? (
               <div className="booking-time-grid">
-                {timeSlots.map(slot => (
+                {timeSlotsDetailed.map(slot => (
                   <button
-                    className={`booking-time-slot ${selectedTime === slot ? 'booking-time-selected' : ''}`}
-                    key={slot}
-                    onClick={() => handleSelectTime(slot)}
+                    key={slot.time}
+                    type="button"
+                    disabled={!slot.available}
+                    className={`booking-time-slot ${selectedTime === slot.time ? 'booking-time-selected' : ''} ${!slot.available ? 'booking-time-disabled' : ''}`}
+                    onClick={() => slot.available && handleSelectTime(slot.time)}
                   >
-                    {formatTime(slot)}
+                    <span className="slot-time">{formatTime(slot.time)}</span>
+                    {!slot.available && (
+                      <span className="slot-status-label">
+                        {slot.reason === 'booked' ? 'Booked' : 'Unavailable'}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -431,10 +595,10 @@ export default function PublicBookingPage() {
             </div>
 
             {/* Cancellation Policy */}
-            {state.policies && (
+            {policies && (
               <div className="booking-policy">
                 <div className="booking-policy-title">Cancellation Policy</div>
-                <p className="booking-policy-text">{state.policies.policyText}</p>
+                <p className="booking-policy-text">{policies.policyText}</p>
               </div>
             )}
 
@@ -506,6 +670,12 @@ export default function PublicBookingPage() {
             </div>
 
             <div className="confirmed-actions">
+              <button
+                className="btn btn-primary btn-block"
+                onClick={() => navigate(`/booking/${confirmedBooking.id}`)}
+              >
+                ⚙️ Manage Appointment
+              </button>
               <button className="btn btn-secondary btn-block" onClick={() => addToast('Added to calendar (demo) 📅')}>
                 📅 Add to Calendar
               </button>

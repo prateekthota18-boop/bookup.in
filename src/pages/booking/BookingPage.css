@@ -274,7 +274,11 @@
 }
 
 .booking-time-slot {
-  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2) var(--space-2);
   text-align: center;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
@@ -284,6 +288,7 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   color: var(--color-text);
+  min-height: 48px;
 }
 
 .booking-time-slot:hover {
@@ -294,6 +299,29 @@
 
 .booking-time-slot:active {
   transform: scale(0.97);
+}
+
+.booking-time-slot:disabled,
+.booking-time-disabled {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+  background: var(--color-gray-50, #f8fafc) !important;
+  border-color: var(--color-border, #e2e8f0) !important;
+  color: var(--color-text-tertiary, #94a3b8) !important;
+  pointer-events: none;
+}
+
+.slot-time {
+  line-height: 1.2;
+}
+
+.slot-status-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+  font-weight: 600;
+  margin-top: 2px;
 }
 
 .booking-time-selected {

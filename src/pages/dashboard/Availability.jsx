@@ -4,9 +4,12 @@
  */
 
 import { Link } from 'react-router-dom';
-import { useStore, ACTIONS } from '../../data/store';
+import { useStore } from '../../data/store';
+import { ACTIONS } from '../../data/actions';
 import { DAYS_OF_WEEK, DAY_FULL_LABELS, formatTimeAmPm } from '../../utils/helpers';
 import { MOCK_GCAL_BUSY_EVENTS } from '../../services/calendar/MockGoogleCalendarProvider';
+import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
+import { dbService } from '../../services/supabase/dbService';
 
 const DAY_INDEX_NAMES = {
   1: 'Mondays',
@@ -40,7 +43,18 @@ export default function Availability() {
     dispatch({ type: ACTIONS.UPDATE_AVAILABILITY, payload: { [field]: value } });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!state.auth?.isDemoMode && isSupabaseConfigured() && state.provider?.id) {
+      try {
+        await dbService.saveAvailability(state.provider.id, availability.schedule, {
+          bufferTime: availability.bufferTime,
+          minNotice: availability.minNotice,
+          maxAdvanceBooking: availability.maxAdvanceBooking,
+        });
+      } catch (err) {
+        console.error('Failed to save availability in Supabase:', err);
+      }
+    }
     addToast('Availability updated ✓ Dynamic slot engine updated.');
   };
 
@@ -61,15 +75,9 @@ export default function Availability() {
           {DAYS_OF_WEEK.map(day => (
             <div
               key={day}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: 'var(--space-3) 0',
-                borderBottom: '1px solid var(--color-border)',
-              }}
+              className="schedule-day-row"
             >
-              <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', minWidth: 160 }}>
+              <label className="schedule-day-label">
                 <input
                   type="checkbox"
                   className="form-checkbox"
@@ -79,19 +87,17 @@ export default function Availability() {
                 <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>{DAY_FULL_LABELS[day]}</span>
               </label>
               {availability.schedule[day]?.available ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
+                <div className="schedule-time-range">
                   <input
                     type="time"
-                    className="form-input"
-                    style={{ width: 130, padding: '4px 8px', fontSize: 'var(--font-size-sm)' }}
+                    className="form-input schedule-time-input"
                     value={availability.schedule[day]?.start || '09:00'}
                     onChange={e => updateDay(day, 'start', e.target.value)}
                   />
                   <span style={{ color: 'var(--color-text-tertiary)' }}>to</span>
                   <input
                     type="time"
-                    className="form-input"
-                    style={{ width: 130, padding: '4px 8px', fontSize: 'var(--font-size-sm)' }}
+                    className="form-input schedule-time-input"
                     value={availability.schedule[day]?.end || '18:00'}
                     onChange={e => updateDay(day, 'end', e.target.value)}
                   />

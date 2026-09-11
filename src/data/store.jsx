@@ -3,8 +3,11 @@
  * React Context + localStorage for persistent state
  */
 
-import { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
+import { createContext, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
 import { createSeedState } from './seedData';
+import { ACTIONS } from './actions';
+import { supabase, isSupabaseConfigured } from '../services/supabase/supabaseClient';
+import { dbService } from '../services/supabase/dbService';
 
 const STORAGE_KEY = 'bookup_state';
 
@@ -14,6 +17,7 @@ const initialState = {
     isAuthenticated: false,
     isDemoMode: false,
     user: null,
+    loading: true,
   },
   provider: null,
   services: [],
@@ -34,83 +38,63 @@ const initialState = {
   toasts: [],
 };
 
-// --- Action Types ---
-export const ACTIONS = {
-  // Auth
-  LOGIN: 'LOGIN',
-  SIGNUP: 'SIGNUP',
-  LOGOUT: 'LOGOUT',
-  ENTER_DEMO: 'ENTER_DEMO',
-  
-  // Provider
-  UPDATE_PROVIDER: 'UPDATE_PROVIDER',
-  
-  // Services
-  ADD_SERVICE: 'ADD_SERVICE',
-  UPDATE_SERVICE: 'UPDATE_SERVICE',
-  DELETE_SERVICE: 'DELETE_SERVICE',
-  TOGGLE_SERVICE: 'TOGGLE_SERVICE',
-  
-  // Availability
-  UPDATE_AVAILABILITY: 'UPDATE_AVAILABILITY',
-  
-  // Bookings
-  ADD_BOOKING: 'ADD_BOOKING',
-  UPDATE_BOOKING: 'UPDATE_BOOKING',
-  CANCEL_BOOKING: 'CANCEL_BOOKING',
-  RESCHEDULE_BOOKING: 'RESCHEDULE_BOOKING',
-  MARK_COMPLETED: 'MARK_COMPLETED',
-  MARK_NO_SHOW: 'MARK_NO_SHOW',
-  MARK_LATE_CANCELLATION: 'MARK_LATE_CANCELLATION',
-  
-  // Google Calendar
-  CONNECT_GOOGLE_CALENDAR: 'CONNECT_GOOGLE_CALENDAR',
-  DISCONNECT_GOOGLE_CALENDAR: 'DISCONNECT_GOOGLE_CALENDAR',
-  
-  // Policies
-  UPDATE_POLICIES: 'UPDATE_POLICIES',
-  
-  // Reminders
-  UPDATE_REMINDERS: 'UPDATE_REMINDERS',
-  
-  // Onboarding
-  SET_ONBOARDING_STEP: 'SET_ONBOARDING_STEP',
-  COMPLETE_ONBOARDING: 'COMPLETE_ONBOARDING',
-  
-  // Toasts
-  ADD_TOAST: 'ADD_TOAST',
-  REMOVE_TOAST: 'REMOVE_TOAST',
-
-  // Full state
-  LOAD_STATE: 'LOAD_STATE',
-};
-
 // --- Reducer ---
 function reducer(state, action) {
   switch (action.type) {
     case ACTIONS.LOAD_STATE:
       return { ...action.payload, toasts: [] };
 
+    case ACTIONS.HYDRATE_DASHBOARD:
+      return {
+        ...state,
+        auth: {
+          isAuthenticated: true,
+          isDemoMode: false,
+          user: action.payload.user,
+          loading: false,
+        },
+        provider: action.payload.provider,
+        services: action.payload.services || [],
+        availability: action.payload.availability || state.availability,
+        bookings: action.payload.bookings || [],
+        policies: action.payload.policies || state.policies,
+        onboarding: { completed: true, currentStep: 8 },
+      };
+
+    case ACTIONS.SET_AUTH_LOADING:
+      return {
+        ...state,
+        auth: { ...state.auth, loading: action.payload },
+      };
+
     case ACTIONS.LOGIN:
       return {
         ...state,
-        auth: { isAuthenticated: true, isDemoMode: false, user: action.payload },
+        auth: { isAuthenticated: true, isDemoMode: false, user: action.payload, loading: false },
       };
 
     case ACTIONS.SIGNUP:
       return {
         ...state,
-        auth: { isAuthenticated: true, isDemoMode: false, user: action.payload },
+        auth: { isAuthenticated: true, isDemoMode: false, user: action.payload, loading: false },
         provider: action.payload,
       };
 
     case ACTIONS.LOGOUT:
       localStorage.removeItem(STORAGE_KEY);
-      return { ...initialState };
+      return {
+        ...initialState,
+        auth: { isAuthenticated: false, isDemoMode: false, user: null, loading: false },
+      };
 
     case ACTIONS.ENTER_DEMO: {
       const seed = createSeedState();
-      return { ...seed, onboarding: { completed: true, currentStep: 8 }, toasts: [] };
+      return {
+        ...seed,
+        auth: { isAuthenticated: true, isDemoMode: true, user: seed.provider, loading: false },
+        onboarding: { completed: true, currentStep: 8 },
+        toasts: []
+      };
     }
 
     case ACTIONS.UPDATE_PROVIDER:
@@ -238,6 +222,12 @@ function reducer(state, action) {
         ),
       };
 
+    case ACTIONS.DELETE_BOOKING:
+      return {
+        ...state,
+        bookings: state.bookings.filter(b => b.id !== action.payload),
+      };
+
     case ACTIONS.UPDATE_POLICIES:
       return { ...state, policies: { ...state.policies, ...action.payload } };
 
@@ -270,23 +260,122 @@ export function StoreProvider({ children }) {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        return { ...initialState, ...parsed, toasts: [] };
+        // ONLY restore from localStorage if the user was explicitly in Demo Mode
+        if (parsed?.auth?.isDemoMode) {
+          return { ...parsed, auth: { ...parsed.auth, loading: false }, toasts: [] };
+        }
       }
     } catch (e) {
-      console.error('Failed to load state from localStorage:', e);
+      console.error('Failed to load demo state from localStorage:', e);
     }
+    // For real Supabase users, start with initialState (loading: true)
     return initialState;
   });
 
-  // Persist state to localStorage (excluding toasts)
+  // Persist state to localStorage ONLY when in Demo Mode
   useEffect(() => {
     try {
-      const { toasts, ...persistState } = state;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(persistState));
+      if (state.auth?.isDemoMode) {
+        const { toasts: _t, ...persistState } = state;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(persistState));
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
     } catch (e) {
-      console.error('Failed to save state:', e);
+      console.error('Failed to manage localStorage:', e);
     }
-  }, [state]);
+  }, [state.auth?.isDemoMode, state]);
+
+  const isHydratingRef = useRef(false);
+
+  // Synchronize with Supabase Auth & Hydrate Provider Dashboard
+  const refreshFromSupabase = useCallback(async (userId = null) => {
+    if (!isSupabaseConfigured()) {
+      dispatch({ type: ACTIONS.SET_AUTH_LOADING, payload: false });
+      return;
+    }
+
+    if (isHydratingRef.current) return;
+    isHydratingRef.current = true;
+
+    try {
+      let uid = userId;
+      if (!uid) {
+        const { data: { user } } = await supabase.auth.getUser();
+        uid = user?.id;
+      }
+
+      if (!uid) {
+        dispatch({ type: ACTIONS.SET_AUTH_LOADING, payload: false });
+        isHydratingRef.current = false;
+        return;
+      }
+
+      const dashData = await dbService.getDashboardData(uid);
+      if (dashData && dashData.provider) {
+        dispatch({
+          type: ACTIONS.HYDRATE_DASHBOARD,
+          payload: {
+            user: {
+              id: uid,
+              email: dashData.provider.email,
+              name: dashData.provider.name,
+              ...dashData.provider,
+            },
+            provider: dashData.provider,
+            services: dashData.services || [],
+            availability: dashData.availability,
+            bookings: dashData.bookings || [],
+            policies: dashData.policies,
+          },
+        });
+      } else {
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        dispatch({
+          type: ACTIONS.LOGIN,
+          payload: currentUser
+            ? { id: currentUser.id, email: currentUser.email, name: currentUser.user_metadata?.name || 'Provider' }
+            : { id: uid },
+        });
+      }
+    } catch (err) {
+      console.error('Failed to hydrate from Supabase:', err);
+      dispatch({ type: ACTIONS.SET_AUTH_LOADING, payload: false });
+    } finally {
+      isHydratingRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      dispatch({ type: ACTIONS.SET_AUTH_LOADING, payload: false });
+      return;
+    }
+
+    // Check existing Supabase session on boot/refresh
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        refreshFromSupabase(session.user.id);
+      } else {
+        dispatch({ type: ACTIONS.SET_AUTH_LOADING, payload: false });
+      }
+    }).catch(err => {
+      console.error('getSession error:', err);
+      dispatch({ type: ACTIONS.SET_AUTH_LOADING, payload: false });
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
+        refreshFromSupabase(session.user.id);
+      } else if (event === 'SIGNED_OUT') {
+        dispatch({ type: ACTIONS.LOGOUT });
+      }
+    });
+
+    return () => {
+      subscription?.unsubscribe();
+    };
+  }, [refreshFromSupabase]);
 
   const addToast = useCallback((message, type = 'success', duration = 4000) => {
     const id = `toast-${Date.now()}`;
@@ -297,7 +386,7 @@ export function StoreProvider({ children }) {
   }, []);
 
   return (
-    <StoreContext.Provider value={{ state, dispatch, addToast }}>
+    <StoreContext.Provider value={{ state, dispatch, addToast, refreshFromSupabase }}>
       {children}
     </StoreContext.Provider>
   );
@@ -363,10 +452,15 @@ export function formatDateShort(dateStr) {
 }
 
 export function formatTime(timeStr) {
+  if (!timeStr) return '';
+  if (typeof timeStr === 'string' && (timeStr.includes('AM') || timeStr.includes('PM'))) {
+    return timeStr;
+  }
   const [h, m] = timeStr.split(':').map(Number);
+  if (isNaN(h)) return timeStr;
   const period = h >= 12 ? 'PM' : 'AM';
   const hour = h % 12 || 12;
-  return `${hour}:${String(m).padStart(2, '0')} ${period}`;
+  return `${hour}:${String(m || 0).padStart(2, '0')} ${period}`;
 }
 
 export function getStatusBadgeClass(status) {

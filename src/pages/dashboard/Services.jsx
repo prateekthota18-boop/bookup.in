@@ -4,7 +4,10 @@
  */
 
 import { useState } from 'react';
-import { useStore, ACTIONS, generateId, formatCurrency } from '../../data/store';
+import { useStore, generateId, formatCurrency } from '../../data/store';
+import { ACTIONS } from '../../data/actions';
+import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
+import { dbService } from '../../services/supabase/dbService';
 
 // Helper to detect obvious keyboard-mash gibberish
 function isGibberish(str) {
@@ -68,11 +71,21 @@ export default function Services() {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
 
     if (editingService) {
+      if (!state.auth?.isDemoMode && isSupabaseConfigured() && !editingService.id.startsWith('svc-')) {
+        dbService.updateService(editingService.id, {
+          name: form.name.trim(),
+          description: form.description.trim(),
+          price: Number(form.price),
+          duration: Number(form.duration),
+          depositAmount: Number(form.depositAmount) || 0,
+        }).catch(err => console.error('Failed to update service in Supabase:', err));
+      }
+
       dispatch({
         type: ACTIONS.UPDATE_SERVICE,
         payload: {
@@ -86,10 +99,31 @@ export default function Services() {
       });
       addToast('Service updated ✓');
     } else {
+      let newServiceId = generateId('svc');
+
+      if (!state.auth?.isDemoMode && isSupabaseConfigured() && state.provider?.id) {
+        try {
+          const created = await dbService.createService({
+            providerId: state.provider.id,
+            name: form.name.trim(),
+            description: form.description.trim(),
+            price: Number(form.price),
+            duration: Number(form.duration),
+            depositAmount: Number(form.depositAmount) || 0,
+            isActive: true,
+          });
+          if (created?.id) {
+            newServiceId = created.id;
+          }
+        } catch (err) {
+          console.error('Failed to create service in Supabase:', err);
+        }
+      }
+
       dispatch({
         type: ACTIONS.ADD_SERVICE,
         payload: {
-          id: generateId('svc'),
+          id: newServiceId,
           providerId: state.provider?.id,
           name: form.name.trim(),
           description: form.description.trim(),
@@ -106,14 +140,24 @@ export default function Services() {
   };
 
   const handleDelete = (id) => {
+    if (!state.auth?.isDemoMode && isSupabaseConfigured() && id && !id.startsWith('svc-')) {
+      dbService.deleteService(id).catch(err => console.error('Failed to delete service in Supabase:', err));
+    }
+
     dispatch({ type: ACTIONS.DELETE_SERVICE, payload: id });
     addToast('Service deleted');
   };
 
   const handleToggle = (id) => {
-    dispatch({ type: ACTIONS.TOGGLE_SERVICE, payload: id });
     const service = state.services.find(s => s.id === id);
-    addToast(service?.isActive ? 'Service deactivated' : 'Service activated ✓');
+    const nextState = !service?.isActive;
+
+    if (!state.auth?.isDemoMode && isSupabaseConfigured() && id && !id.startsWith('svc-')) {
+      dbService.toggleService(id, nextState).catch(err => console.error('Failed to toggle service in Supabase:', err));
+    }
+
+    dispatch({ type: ACTIONS.TOGGLE_SERVICE, payload: id });
+    addToast(nextState ? 'Service activated ✓' : 'Service deactivated');
   };
 
   return (

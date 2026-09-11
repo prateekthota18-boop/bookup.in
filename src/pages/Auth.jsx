@@ -4,7 +4,8 @@
 
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useStore, ACTIONS, generateId } from '../data/store';
+import { useStore, generateId } from '../data/store';
+import { ACTIONS } from '../data/actions';
 
 function AuthLayout({ children, title, subtitle }) {
   const navigate = useNavigate();
@@ -112,31 +113,104 @@ function AuthLayout({ children, title, subtitle }) {
   );
 }
 
+import { supabase, isSupabaseConfigured } from '../services/supabase/supabaseClient';
+import { dbService } from '../services/supabase/dbService';
+
 export function Login() {
   const navigate = useNavigate();
-  const { dispatch } = useStore();
+  const { dispatch, addToast } = useStore();
   const [form, setForm] = useState({ emailOrPhone: '', password: '' });
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Simulated login
-    dispatch({
-      type: ACTIONS.ENTER_DEMO,
-    });
-    navigate('/dashboard');
+    setErrorMsg('');
+
+    if (!form.emailOrPhone || !form.password) {
+      setErrorMsg('Please enter both email and password.');
+      return;
+    }
+
+    if (!isSupabaseConfigured()) {
+      // Fallback for offline demo mode
+      dispatch({ type: ACTIONS.ENTER_DEMO });
+      navigate('/dashboard');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const email = form.emailOrPhone.trim();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: form.password,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data?.user) {
+        // Fetch provider profile
+        const provider = await dbService.getProviderByUserId(data.user.id);
+        dispatch({
+          type: ACTIONS.LOGIN,
+          payload: {
+            id: data.user.id,
+            email: data.user.email,
+            name: provider?.name || data.user.user_metadata?.name || 'Provider',
+            ...provider,
+          },
+        });
+
+        if (provider) {
+          dispatch({ type: ACTIONS.UPDATE_PROVIDER, payload: provider });
+          addToast(`Welcome back, ${provider.name}! 👋`);
+          navigate('/dashboard');
+        } else {
+          // No profile yet, take to onboarding
+          navigate('/onboarding');
+        }
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      let msg = err.message || 'Invalid email or password.';
+      if (err.message?.toLowerCase().includes('invalid login credentials')) {
+        msg = 'Invalid email or password. Please check your credentials and try again.';
+      } else if (err.message?.toLowerCase().includes('email not confirmed')) {
+        msg = 'Please confirm your email address before logging in, or disable email confirmation in Supabase.';
+      }
+      setErrorMsg(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <AuthLayout title="Welcome back" subtitle="Log in to your BookUp account">
       <form className="auth-form" onSubmit={handleSubmit}>
+        {errorMsg && (
+          <div style={{
+            padding: 'var(--space-3) var(--space-4)',
+            background: 'var(--color-error-50, #fef2f2)',
+            border: '1px solid var(--color-error-200, #fecaca)',
+            borderRadius: 'var(--radius-md)',
+            color: 'var(--color-error-700, #b91c1c)',
+            fontSize: 'var(--font-size-sm)',
+          }}>
+            {errorMsg}
+          </div>
+        )}
         <div className="form-group">
-          <label className="form-label">Email or phone number</label>
+          <label className="form-label">Email address</label>
           <input
             className="form-input"
-            type="text"
-            placeholder="you@example.com or +91 98765 43210"
+            type="email"
+            placeholder="you@example.com"
             value={form.emailOrPhone}
             onChange={e => setForm({ ...form, emailOrPhone: e.target.value })}
+            required
           />
         </div>
         <div className="form-group">
@@ -147,10 +221,11 @@ export function Login() {
             placeholder="Enter your password"
             value={form.password}
             onChange={e => setForm({ ...form, password: e.target.value })}
+            required
           />
         </div>
-        <button className="btn btn-primary btn-block" type="submit">
-          Log in
+        <button className="btn btn-primary btn-block" type="submit" disabled={loading}>
+          {loading ? 'Logging in...' : 'Log in'}
         </button>
       </form>
       <div className="auth-footer">
@@ -162,25 +237,109 @@ export function Login() {
 
 export function Signup() {
   const navigate = useNavigate();
-  const { dispatch } = useStore();
+  const { dispatch, addToast } = useStore();
   const [form, setForm] = useState({ name: '', emailOrPhone: '', password: '' });
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const user = {
-      id: generateId('provider'),
-      name: form.name,
-      email: form.emailOrPhone.includes('@') ? form.emailOrPhone : '',
-      phone: !form.emailOrPhone.includes('@') ? form.emailOrPhone : '',
-      createdAt: new Date().toISOString(),
-    };
-    dispatch({ type: ACTIONS.SIGNUP, payload: user });
-    navigate('/onboarding');
+    setErrorMsg('');
+
+    if (!form.name.trim()) {
+      setErrorMsg('Please enter your name.');
+      return;
+    }
+    if (!form.emailOrPhone.trim()) {
+      setErrorMsg('Please enter your email.');
+      return;
+    }
+    if (!form.password || form.password.length < 6) {
+      setErrorMsg('Password must be at least 6 characters.');
+      return;
+    }
+
+    if (!isSupabaseConfigured()) {
+      const user = {
+        id: generateId('provider'),
+        name: form.name.trim(),
+        email: form.emailOrPhone.trim(),
+        phone: '',
+        createdAt: new Date().toISOString(),
+      };
+      dispatch({ type: ACTIONS.SIGNUP, payload: user });
+      navigate('/onboarding');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const email = form.emailOrPhone.trim();
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: form.password,
+        options: {
+          data: {
+            name: form.name.trim(),
+          },
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data?.user) {
+        // Check if user already exists (Supabase returns empty identities array)
+        if (data.user.identities && data.user.identities.length === 0) {
+          setErrorMsg('An account with this email already exists. Please log in.');
+          return;
+        }
+
+        const user = {
+          id: data.user.id,
+          userId: data.user.id,
+          name: form.name.trim(),
+          email,
+          createdAt: data.user.created_at || new Date().toISOString(),
+        };
+        dispatch({ type: ACTIONS.SIGNUP, payload: user });
+
+        if (data.session) {
+          addToast("Account created! Let's set up your booking page. 🚀");
+          navigate('/onboarding');
+        } else {
+          addToast('Account created! Please check your email to confirm your account, then log in.', 'info', 6000);
+          navigate('/login');
+        }
+      }
+    } catch (err) {
+      console.error('Signup error:', err);
+      let msg = err.message || 'Failed to create account.';
+      if (err.message?.includes('over_email_send_rate_limit')) {
+        msg = 'Email rate limit reached. Please disable "Confirm email" in your Supabase Auth settings to test instant signups.';
+      }
+      setErrorMsg(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <AuthLayout title="Create your account" subtitle="Start getting booked in under 5 minutes">
       <form className="auth-form" onSubmit={handleSubmit}>
+        {errorMsg && (
+          <div style={{
+            padding: 'var(--space-3) var(--space-4)',
+            background: 'var(--color-error-50, #fef2f2)',
+            border: '1px solid var(--color-error-200, #fecaca)',
+            borderRadius: 'var(--radius-md)',
+            color: 'var(--color-error-700, #b91c1c)',
+            fontSize: 'var(--font-size-sm)',
+          }}>
+            {errorMsg}
+          </div>
+        )}
         <div className="form-group">
           <label className="form-label">Your name</label>
           <input
@@ -193,11 +352,11 @@ export function Signup() {
           />
         </div>
         <div className="form-group">
-          <label className="form-label">Email or phone number</label>
+          <label className="form-label">Email address</label>
           <input
             className="form-input"
-            type="text"
-            placeholder="you@example.com or +91 98765 43210"
+            type="email"
+            placeholder="you@example.com"
             value={form.emailOrPhone}
             onChange={e => setForm({ ...form, emailOrPhone: e.target.value })}
             required
@@ -208,14 +367,14 @@ export function Signup() {
           <input
             className="form-input"
             type="password"
-            placeholder="Create a password"
+            placeholder="Create a password (min 6 characters)"
             value={form.password}
             onChange={e => setForm({ ...form, password: e.target.value })}
             required
           />
         </div>
-        <button className="btn btn-primary btn-block" type="submit">
-          Create Account
+        <button className="btn btn-primary btn-block" type="submit" disabled={loading}>
+          {loading ? 'Creating account...' : 'Create Account'}
         </button>
       </form>
       <div className="auth-footer">
@@ -224,3 +383,4 @@ export function Signup() {
     </AuthLayout>
   );
 }
+

@@ -4,9 +4,12 @@
  */
 
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useStore, ACTIONS, generateId, formatCurrency } from '../data/store';
+import { useNavigate, Link } from 'react-router-dom';
+import { useStore, generateId, formatCurrency } from '../data/store';
+import { ACTIONS } from '../data/actions';
 import { generateSlug, getInitials, DAYS_OF_WEEK, DAY_FULL_LABELS } from '../utils/helpers';
+import { supabase, isSupabaseConfigured } from '../services/supabase/supabaseClient';
+import { dbService } from '../services/supabase/dbService';
 import './Onboarding.css';
 
 const TOTAL_STEPS = 8;
@@ -77,9 +80,71 @@ export default function Onboarding() {
     if (step > 0) setStep(step - 1);
   };
 
-  const finishOnboarding = () => {
-    const providerId = state.provider?.id || generateId('provider');
-    
+  const finishOnboarding = async () => {
+    let providerId = state.provider?.id || generateId('provider');
+    const authUser = isSupabaseConfigured() ? (await supabase.auth.getUser())?.data?.user : null;
+
+    if (authUser) {
+      try {
+        // 1. Create/Update provider in Supabase
+        const existingProv = await dbService.getProviderByUserId(authUser.id);
+        if (existingProv) {
+          providerId = existingProv.id;
+          await dbService.updateProviderProfile(providerId, {
+            name: providerName,
+            businessName,
+            slug,
+            bio,
+            bufferTime: bookingRules.bufferTime,
+            minNotice: bookingRules.minNotice,
+            maxAdvanceBooking: bookingRules.maxAdvanceBooking,
+          });
+        } else {
+          const newProv = await dbService.createProviderProfile({
+            userId: authUser.id,
+            name: providerName,
+            businessName,
+            slug,
+            email: authUser.email,
+            phone: state.provider?.phone || '',
+            bio,
+          });
+          if (newProv?.id) {
+            providerId = newProv.id;
+          }
+        }
+
+        // 2. Create Service
+        if (service.name.trim()) {
+          await dbService.createService({
+            providerId,
+            name: service.name.trim(),
+            description: service.description.trim(),
+            price: Number(service.price),
+            duration: Number(service.duration),
+            depositAmount: Number(service.depositAmount) || 0,
+            isActive: true,
+          });
+        }
+
+        // 3. Save Availability
+        await dbService.saveAvailability(providerId, availability, {
+          bufferTime: bookingRules.bufferTime,
+          minNotice: bookingRules.minNotice,
+          maxAdvanceBooking: bookingRules.maxAdvanceBooking,
+        });
+
+        // 4. Save Policies
+        await dbService.savePolicy(providerId, {
+          cancellationWindow: bookingRules.cancellationWindow,
+          depositAmount: policies.depositAmount,
+          policyText: `Cancel more than ${bookingRules.cancellationWindow} hours before your appointment: full deposit refund. Late cancellation or no-show: deposit forfeited (${formatCurrency(policies.depositAmount)}).`,
+        });
+      } catch (err) {
+        console.error('Failed to persist onboarding to Supabase:', err);
+      }
+    }
+
     dispatch({
       type: ACTIONS.UPDATE_PROVIDER,
       payload: {
@@ -540,10 +605,10 @@ export default function Onboarding() {
       <div className="onb-container">
         {/* Header */}
         <div className="onb-header">
-          <a href="/" className="landing-logo">
+          <Link to="/" className="landing-logo">
             <span className="logo-icon">B</span>
             <span className="logo-text">BookUp</span>
-          </a>
+          </Link>
           <span className="onb-step-counter">Step {step + 1} of {TOTAL_STEPS}</span>
         </div>
 

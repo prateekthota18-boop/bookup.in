@@ -4,8 +4,9 @@
  */
 
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useStore, ACTIONS } from '../data/store';
+import { useNavigate, Link } from 'react-router-dom';
+import { useStore } from '../data/store';
+import { ACTIONS } from '../data/actions';
 import './Landing.css';
 
 const FEATURES = [
@@ -147,10 +148,10 @@ export default function Landing() {
       <nav className="landing-nav">
         <div className="container">
           <div className="landing-nav-inner">
-            <a href="/" className="landing-logo">
+            <Link to="/" className="landing-logo">
               <span className="logo-icon">B</span>
               <span className="logo-text">BookUp</span>
-            </a>
+            </Link>
             <div className="landing-nav-links hide-mobile">
               <a href="#how-it-works">How it works</a>
               <a href="#features">Features</a>
@@ -456,10 +457,10 @@ export default function Landing() {
         <div className="container">
           <div className="footer-content">
             <div className="footer-brand">
-              <a href="/" className="landing-logo">
+              <Link to="/" className="landing-logo">
                 <span className="logo-icon">B</span>
                 <span className="logo-text">BookUp</span>
-              </a>
+              </Link>
               <p>India's simplest scheduling & booking platform for service professionals.</p>
             </div>
             <div className="footer-links">

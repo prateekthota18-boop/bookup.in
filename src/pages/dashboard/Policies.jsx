@@ -2,7 +2,10 @@
  * BookUp — Policies & Deposits Page
  */
 
-import { useStore, ACTIONS, formatCurrency } from '../../data/store';
+import { useStore, formatCurrency } from '../../data/store';
+import { ACTIONS } from '../../data/actions';
+import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
+import { dbService } from '../../services/supabase/dbService';
 
 export default function Policies() {
   const { state, dispatch, addToast } = useStore();
@@ -18,8 +21,21 @@ export default function Policies() {
     dispatch({ type: ACTIONS.UPDATE_POLICIES, payload: { [field]: value } });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const policyText = `Cancel more than ${policies.cancellationWindow} hours before your appointment: full deposit refund. Late cancellation or no-show: deposit forfeited (${formatCurrency(policies.depositAmount)}).`;
+    
+    if (!state.auth?.isDemoMode && isSupabaseConfigured() && state.provider?.id) {
+      try {
+        await dbService.savePolicy(state.provider.id, {
+          cancellationWindow: policies.cancellationWindow,
+          depositAmount: policies.depositAmount,
+          policyText,
+        });
+      } catch (err) {
+        console.error('Failed to save policy in Supabase:', err);
+      }
+    }
+
     dispatch({ type: ACTIONS.UPDATE_POLICIES, payload: { policyText } });
     addToast('Policies updated ✓');
   };
@@ -34,7 +50,7 @@ export default function Policies() {
         <button className="btn btn-primary" onClick={handleSave}>Save Changes</button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)' }}>
+      <div className="policies-grid">
         {/* Settings */}
         <div className="card card-padding">
           <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, marginBottom: 'var(--space-5)' }}>Deposit Settings</h4>

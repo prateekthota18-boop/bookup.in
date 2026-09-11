@@ -2,6 +2,7 @@
  * BookUp — Dashboard Overview
  */
 
+import { Link } from 'react-router-dom';
 import { useStore, formatCurrency, calculateMetrics } from '../../data/store';
 import { getGreeting } from '../../utils/helpers';
 
@@ -49,7 +50,7 @@ export default function Overview() {
       <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
         <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600 }}>Upcoming appointments</h4>
-          <a href="/dashboard/appointments" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-600)', textDecoration: 'none' }}>View all →</a>
+          <Link to="/dashboard/appointments" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-600)', textDecoration: 'none' }}>View all →</Link>
         </div>
         {upcoming.length > 0 ? (
           <div className="table-container">
@@ -95,10 +96,11 @@ export default function Overview() {
 
       {/* Quick Actions */}
       <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-        <a href="/dashboard/booking-page" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>🔗 Copy Booking Link</a>
-        <a href="/dashboard/services" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>📋 Manage Services</a>
-        <a href="/dashboard/analytics" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>📊 View Analytics</a>
+        <Link to="/dashboard/booking-page" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>🔗 Copy Booking Link</Link>
+        <Link to="/dashboard/services" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>📋 Manage Services</Link>
+        <Link to="/dashboard/analytics" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>📊 View Analytics</Link>
       </div>
     </div>
   );
 }
+

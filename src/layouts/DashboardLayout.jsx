@@ -4,9 +4,11 @@
  */
 
 import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { useStore, ACTIONS, useAuth } from '../data/store';
+import { NavLink, Link, Outlet, useNavigate } from 'react-router-dom';
+import { useStore, useAuth } from '../data/store';
+import { ACTIONS } from '../data/actions';
 import { getInitials } from '../utils/helpers';
+import { supabase, isSupabaseConfigured } from '../services/supabase/supabaseClient';
 import './DashboardLayout.css';
 
 const NAV_ITEMS = [
@@ -85,9 +87,16 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const provider = state.provider;
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.auth.signOut();
+      } catch (e) {
+        console.error('Logout error:', e);
+      }
+    }
     dispatch({ type: ACTIONS.LOGOUT });
-    navigate('/');
+    navigate('/login');
   };
 
   return (
@@ -98,10 +107,10 @@ export default function DashboardLayout() {
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-header">
-          <a href="/" className="sidebar-logo">
+          <Link to="/" className="sidebar-logo">
             <span className="logo-icon">B</span>
             <span className="logo-text">BookUp</span>
-          </a>
+          </Link>
           <button className="sidebar-close hide-desktop" onClick={() => setSidebarOpen(false)}>
             {ICONS.x}
           </button>

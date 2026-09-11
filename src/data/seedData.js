@@ -9,9 +9,6 @@ const formatDate = (d) => d.toISOString().split('T')[0];
 const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
 const subDays = (d, n) => addDays(d, -n);
 
-// Generate a time string
-const time = (h, m = 0) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-
 export const DEMO_PROVIDER = {
   id: 'provider-1',
   email: 'priya@alexfitness.in',
@@ -113,7 +110,6 @@ export { DEMO_CUSTOMERS };
 // Generate demo bookings
 function generateBookings() {
   const bookings = [];
-  const statuses = ['confirmed', 'completed', 'cancelled', 'no-show', 'late-cancellation'];
 
   // Past bookings (completed, some cancelled/no-show)
   const pastBookings = [
@@ -203,15 +199,34 @@ export const DEMO_ANALYTICS = {
   ],
 };
 
+export const DEMO_SLUGS = ['priya-sharma', 'alex-johnson', 'alex-fitness', 'demo', 'provider-1'];
+
+export function isDemoSlug(slug) {
+  if (!slug) return false;
+  const s = slug.toLowerCase().trim();
+  return DEMO_SLUGS.includes(s);
+}
+
 // Full seed state
-export function createSeedState() {
+export function createSeedState(slugOverride = null) {
+  const isAlex = slugOverride === 'alex-johnson';
+  const provider = isAlex
+    ? {
+        ...DEMO_PROVIDER,
+        name: 'Alex Johnson',
+        email: 'alex@alexfitness.in',
+        businessName: 'Alex Fitness Studio',
+        slug: 'alex-johnson',
+      }
+    : (slugOverride ? { ...DEMO_PROVIDER, slug: slugOverride } : DEMO_PROVIDER);
+
   return {
     auth: {
       isAuthenticated: true,
       isDemoMode: true,
-      user: DEMO_PROVIDER,
+      user: provider,
     },
-    provider: DEMO_PROVIDER,
+    provider,
     services: DEMO_SERVICES,
     availability: DEMO_AVAILABILITY,
     bookings: DEMO_BOOKINGS,
@@ -225,3 +240,4 @@ export function createSeedState() {
     },
   };
 }
+
