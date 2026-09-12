@@ -15,30 +15,39 @@ function isServiceRoleKey(key) {
   try {
     const parts = key.split('.');
     if (parts.length === 3) {
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
       return payload.role === 'service_role';
     }
   } catch {}
   return false;
 }
 
-// Detect service-role key
-const effectiveServiceRoleKey = isServiceRoleKey(config.supabaseServiceRoleKey)
-  ? config.supabaseServiceRoleKey
-  : isServiceRoleKey(config.supabaseKey)
-    ? config.supabaseKey
-    : null;
+const rawServiceKey = (
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  config.supabaseServiceRoleKey ||
+  (isServiceRoleKey(config.supabaseKey) ? config.supabaseKey : null)
+);
+const effectiveServiceRoleKey = rawServiceKey ? rawServiceKey.trim().replace(/^["']|["']$/g, '') : null;
 
 // Service-role client that bypasses RLS (server-side only, never exposed to frontend)
-const serviceRoleClient = (config.supabaseUrl && effectiveServiceRoleKey)
+export const serviceRoleClient = (config.supabaseUrl && effectiveServiceRoleKey)
   ? createClient(config.supabaseUrl, effectiveServiceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
   : null;
 
+const generalKey = (
+  effectiveServiceRoleKey ||
+  config.supabaseAnonKey ||
+  config.supabaseKey ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  ''
+).trim().replace(/^["']|["']$/g, '');
+
 // General server client for verifying user JWTs
-const authClient = (config.supabaseUrl && (effectiveServiceRoleKey || config.supabaseAnonKey || config.supabaseKey))
-  ? createClient(config.supabaseUrl, effectiveServiceRoleKey || config.supabaseAnonKey || config.supabaseKey, {
+export const authClient = (config.supabaseUrl && generalKey)
+  ? createClient(config.supabaseUrl, generalKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
   : null;
@@ -77,46 +86,49 @@ export async function requireProviderAuth(req, res, next) {
     // User-scoped client (satisfies auth.uid() = user_id for RLS)
     const userClient = createClient(
       config.supabaseUrl,
-      config.supabaseAnonKey || config.supabaseKey,
+      config.supabaseAnonKey || config.supabaseKey || generalKey,
       {
         global: { headers: { Authorization: `Bearer ${token}` } },
         auth: { persistSession: false, autoRefreshToken: false },
       }
     );
 
+    // Prefer serviceRoleClient (bypasses RLS), then userClient, then authClient
     const queryClient = serviceRoleClient || userClient || authClient;
 
     // 3. Search providers for user_id = authenticated user.id
-    const { data: providerByUid, error: lookupErr } = await queryClient
+    let { data: provider, error: lookupErr } = await queryClient
       .from('providers')
       .select('id, user_id, name, slug, timezone, email')
       .eq('user_id', user.id)
       .maybeSingle();
 
-    console.log(`[AUTH] Provider lookup result:`, providerByUid ? `Found ID ${providerByUid.id}` : 'None', `| Lookup error:`, lookupErr ? lookupErr.message : 'none');
-    console.log(`[AUTH] Whether provider was found: ${Boolean(providerByUid)}`);
+    // If not found with primary queryClient and userClient is different, try userClient
+    if (!provider && userClient && queryClient !== userClient) {
+      const { data: provUser } = await userClient
+        .from('providers')
+        .select('id, user_id, name, slug, timezone, email')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (provUser) provider = provUser;
+    }
 
-    let provider = providerByUid;
+    console.log(`[AUTH] Provider lookup by user_id result:`, provider ? `Found ID ${provider.id}` : 'None', `| Lookup error:`, lookupErr ? lookupErr.message : 'none');
 
-    // 4. If found, use that provider
-    if (!provider) {
-      // 5. If not found, attempt fallback provisioning
-      console.log(`[AUTH] Fallback provisioning attempted for user.id: ${user.id}`);
+    // 4. If not found by user_id, search by email to link existing profile
+    if (!provider && user.email) {
+      console.log(`[AUTH] Searching providers by email for: ${user.email}`);
+      const { data: emailMatch, error: emailMatchErr } = await queryClient
+        .from('providers')
+        .select('id, user_id, name, slug, timezone, email')
+        .eq('email', user.email.trim().toLowerCase())
+        .maybeSingle();
 
-      // Search for an unlinked provider matching the authenticated user's email
-      if (user.email) {
-        const { data: emailMatch, error: emailMatchErr } = await queryClient
-          .from('providers')
-          .select('id, user_id, name, slug, timezone, email')
-          .eq('email', user.email.trim().toLowerCase())
-          .is('user_id', null)
-          .maybeSingle();
+      console.log(`[AUTH] Provider match by email:`, emailMatch ? `Found ID ${emailMatch.id} (user_id: ${emailMatch.user_id})` : 'None', `| Error:`, emailMatchErr ? emailMatchErr.message : 'none');
 
-        console.log(`[AUTH] Unlinked provider match by email:`, emailMatch ? `Found ID ${emailMatch.id}` : 'None', `| Error:`, emailMatchErr ? emailMatchErr.message : 'none');
-
-        // 6. If found, safely update that provider's user_id to authenticated user.id
-        if (emailMatch) {
-          const updateClient = serviceRoleClient || userClient;
+      if (emailMatch) {
+        if (emailMatch.user_id !== user.id) {
+          const updateClient = serviceRoleClient || userClient || authClient;
           const { data: updated, error: updateErr } = await updateClient
             .from('providers')
             .update({ user_id: user.id })
@@ -126,77 +138,87 @@ export async function requireProviderAuth(req, res, next) {
 
           if (!updateErr && updated) {
             provider = updated;
-            console.log(`[AUTH] Provider update succeeded: linked existing provider ${provider.id} to user_id ${user.id}`);
+            console.log(`[AUTH] Provider update succeeded: linked provider ${provider.id} to user_id ${user.id}`);
           } else {
-            console.warn(`[AUTH] Provider update failed:`, updateErr ? updateErr.message : 'No updated row returned');
+            console.warn(`[AUTH] Provider link update note:`, updateErr ? updateErr.message : 'using in-memory link');
+            provider = { ...emailMatch, user_id: user.id };
           }
+        } else {
+          provider = emailMatch;
+        }
+      }
+    }
+
+    // 5. If still not found, auto-provision minimal provider record
+    if (!provider) {
+      console.log(`[AUTH] Fallback provisioning minimal provider for user.id: ${user.id}`);
+      const providerName = user.user_metadata?.name || user.email?.split('@')[0] || 'Provider';
+      const baseSlug = generateSlug(providerName);
+      let candidateSlug = `${baseSlug}-${user.id.substring(0, 6)}`;
+
+      let slugIsUnique = false;
+      let attempts = 0;
+      while (!slugIsUnique && attempts < 5) {
+        const { data: existingSlug } = await queryClient
+          .from('providers')
+          .select('id')
+          .eq('slug', candidateSlug)
+          .maybeSingle();
+
+        if (!existingSlug) {
+          slugIsUnique = true;
+        } else {
+          attempts++;
+          candidateSlug = `${baseSlug}-${user.id.substring(0, 4)}-${Math.floor(Math.random() * 9000 + 1000)}`;
         }
       }
 
-      // 7. If still not found, create a minimal provider record linked to authenticated user.id
-      if (!provider) {
-        const providerName = user.user_metadata?.name || user.email?.split('@')[0] || 'Provider';
-        const baseSlug = generateSlug(providerName);
-        let candidateSlug = `${baseSlug}-${user.id.substring(0, 6)}`;
+      const insertPayload = {
+        user_id: user.id,
+        name: providerName,
+        slug: candidateSlug,
+        email: user.email || '',
+        timezone: 'Asia/Kolkata',
+        buffer_time: 15,
+        min_notice: 2,
+        max_advance_booking: 30,
+      };
 
-        // 8. Ensure slug uniqueness
-        let slugIsUnique = false;
-        let attempts = 0;
-        while (!slugIsUnique && attempts < 5) {
-          const { data: existingSlug } = await queryClient
-            .from('providers')
-            .select('id')
-            .eq('slug', candidateSlug)
-            .maybeSingle();
+      let created = null;
+      let createErr = null;
 
-          if (!existingSlug) {
-            slugIsUnique = true;
-          } else {
-            attempts++;
-            candidateSlug = `${baseSlug}-${user.id.substring(0, 4)}-${Math.floor(Math.random() * 9000 + 1000)}`;
-          }
-        }
+      if (serviceRoleClient) {
+        const res = await serviceRoleClient
+          .from('providers')
+          .insert(insertPayload)
+          .select('id, user_id, name, slug, timezone, email')
+          .maybeSingle();
+        created = res.data;
+        createErr = res.error;
+      }
 
-        const insertPayload = {
-          user_id: user.id,
-          name: providerName,
-          slug: candidateSlug,
-          email: user.email || '',
-          timezone: 'Asia/Kolkata',
-          buffer_time: 15,
-          min_notice: 2,
-          max_advance_booking: 30,
-        };
+      if (!created && userClient) {
+        const res = await userClient
+          .from('providers')
+          .insert(insertPayload)
+          .select('id, user_id, name, slug, timezone, email')
+          .maybeSingle();
+        created = res.data;
+        createErr = res.error || createErr;
+      }
 
-        let created = null;
-        let createErr = null;
-
-        if (serviceRoleClient) {
-          const res = await serviceRoleClient
-            .from('providers')
-            .insert(insertPayload)
-            .select('id, user_id, name, slug, timezone, email')
-            .maybeSingle();
-          created = res.data;
-          createErr = res.error;
-        }
-
-        if (!created && userClient) {
-          const res = await userClient
-            .from('providers')
-            .insert(insertPayload)
-            .select('id, user_id, name, slug, timezone, email')
-            .maybeSingle();
-          created = res.data;
-          createErr = res.error || createErr;
-        }
-
-        if (created) {
-          provider = created;
-          console.log(`[AUTH] Provider creation succeeded: created provider ${provider.id} for user_id ${user.id}`);
-        } else {
-          console.error(`[AUTH] Provider creation failed:`, createErr ? createErr.message : 'Unknown insertion error');
-        }
+      if (created) {
+        provider = created;
+        console.log(`[AUTH] Provider creation succeeded: created provider ${provider.id} for user_id ${user.id}`);
+      } else {
+        console.warn(`[AUTH] Provider creation failed:`, createErr ? createErr.message : 'Unknown error');
+        // If insert failed because row already exists (e.g. unique constraint race), re-query
+        const { data: recheck } = await queryClient
+          .from('providers')
+          .select('id, user_id, name, slug, timezone, email')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (recheck) provider = recheck;
       }
     }
 
@@ -205,13 +227,10 @@ export async function requireProviderAuth(req, res, next) {
       return res.status(403).json({ success: false, error: 'No provider profile linked to authenticated user' });
     }
 
-    // 9. Return/use the resulting provider.id
     console.log(`[AUTH] Resulting provider.id: ${provider.id}, provider.user_id: ${provider.user_id}`);
     req.user = user;
     req.provider = provider;
     req.providerId = provider.id;
-
-    // 10. Continue Google OAuth instead of returning 403
     next();
   } catch (err) {
     console.error(`[AUTH] Exception in requireProviderAuth:`, err.message);

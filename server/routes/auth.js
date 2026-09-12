@@ -27,6 +27,49 @@ router.get('/url', requireProviderAuth, (req, res) => {
 });
 
 /**
+ * GET /api/auth/google/debug
+ * Safe diagnostic endpoint to verify auth token and provider resolution
+ */
+router.get('/debug', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'missing Bearer token' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const { authClient, serviceRoleClient } = await import('../middleware/auth.js');
+    const { data: { user }, error: userError } = await authClient.auth.getUser(token);
+    if (userError || !user) {
+      return res.status(401).json({ error: 'invalid token', details: userError });
+    }
+
+    const { createClient } = await import('@supabase/supabase-js');
+    const anonClient = createClient(config.supabaseUrl, config.supabaseAnonKey || config.supabaseKey);
+    const byUidAnon = await anonClient.from('providers').select('id, user_id, name, slug, email').eq('user_id', user.id).maybeSingle();
+    const byEmailAnon = await anonClient.from('providers').select('id, user_id, name, slug, email').eq('email', user.email.toLowerCase()).maybeSingle();
+
+    let byUidAdmin = null;
+    let byEmailAdmin = null;
+    if (serviceRoleClient) {
+      byUidAdmin = await serviceRoleClient.from('providers').select('id, user_id, name, slug, email').eq('user_id', user.id).maybeSingle();
+      byEmailAdmin = await serviceRoleClient.from('providers').select('id, user_id, name, slug, email').eq('email', user.email.toLowerCase()).maybeSingle();
+    }
+
+    res.json({
+      userId: user.id,
+      userEmail: user.email,
+      hasServiceRoleClient: Boolean(serviceRoleClient),
+      byUidAnon,
+      byEmailAnon,
+      byUidAdmin,
+      byEmailAdmin,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/auth/google/callback
  * Handles Google OAuth redirect and HMAC-signed state verification
  */

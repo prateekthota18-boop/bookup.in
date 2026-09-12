@@ -326,7 +326,7 @@ export function StoreProvider({ children }) {
               email: currentUser.email,
             });
             dashData = await dbService.getDashboardData(uid);
-          } catch (_e) {}
+          } catch {}
         }
       }
 
