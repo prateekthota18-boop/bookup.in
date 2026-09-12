@@ -99,7 +99,7 @@ export default function Settings() {
     }
     setBioError('');
 
-    if (!state.auth?.isDemoMode && isSupabaseConfigured()) {
+    if (isSupabaseConfigured()) {
       try {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser) {
@@ -127,7 +127,7 @@ export default function Settings() {
             const slug = `${baseSlug}-${authUser.id.slice(0, 5)}`;
             savedProv = await dbService.createProviderProfile({
               userId: authUser.id,
-              name,
+              name: name || authUser.user_metadata?.name || 'Provider',
               businessName,
               slug,
               email: email || authUser.email,
@@ -149,6 +149,12 @@ export default function Settings() {
       }
     }
 
+    if (state.auth?.isDemoMode) {
+      dispatch({ type: ACTIONS.UPDATE_PROVIDER, payload: { name, businessName, bio, email, phone } });
+      addToast('Profile updated ✓ (Demo Mode)');
+      return;
+    }
+
     dispatch({ type: ACTIONS.UPDATE_PROVIDER, payload: { name, businessName, bio, email, phone } });
     addToast('Profile updated ✓');
   };
@@ -162,7 +168,7 @@ export default function Settings() {
     try {
       // Ensure provider profile exists in Supabase before requesting Google OAuth URL
       let providerId = provider?.id;
-      if (!state.auth?.isDemoMode && isSupabaseConfigured()) {
+      if (isSupabaseConfigured()) {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser) {
           let prov = await dbService.getProviderByUserId(authUser.id);

@@ -155,28 +155,18 @@ export function Login() {
       if (data?.user) {
         // Fetch or auto-resolve provider profile
         let provider = await dbService.getProviderByUserId(data.user.id);
-        if (!provider && data.user.email) {
-          const { data: emailMatch } = await supabase
-            .from('providers')
-            .select('*')
-            .eq('email', data.user.email.trim().toLowerCase())
-            .maybeSingle();
-
-          if (emailMatch) {
-            await dbService.updateProviderProfile(emailMatch.id, { userId: data.user.id });
-            provider = await dbService.getProviderByUserId(data.user.id);
-          } else {
-            const provName = data.user.user_metadata?.name || data.user.email.split('@')[0] || 'Provider';
-            const provSlug = `${generateSlug(provName)}-${data.user.id.slice(0, 5)}`;
-            try {
-              await dbService.createProviderProfile({
-                userId: data.user.id,
-                name: provName,
-                slug: provSlug,
-                email: data.user.email,
-              });
-              provider = await dbService.getProviderByUserId(data.user.id);
-            } catch {}
+        if (!provider) {
+          const provName = data.user.user_metadata?.name || data.user.email?.split('@')[0] || 'Provider';
+          const provSlug = `${generateSlug(provName)}-${data.user.id.slice(0, 5)}`;
+          try {
+            provider = await dbService.createProviderProfile({
+              userId: data.user.id,
+              name: provName,
+              slug: provSlug,
+              email: data.user.email,
+            });
+          } catch (pErr) {
+            console.warn('Could not auto-provision provider profile on login:', pErr.message);
           }
         }
 

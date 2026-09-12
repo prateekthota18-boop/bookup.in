@@ -100,40 +100,58 @@ export const dbService = {
           .maybeSingle();
 
         if (emailMatch) {
-          await this.updateProviderProfile(emailMatch.id, {
-            userId,
-            name: name || emailMatch.name,
-            businessName: businessName !== undefined ? businessName : emailMatch.business_name,
-            phone: phone !== undefined ? phone : emailMatch.phone,
-            bio: bio !== undefined ? bio : emailMatch.bio,
-          });
-          return await this.getProviderByUserId(userId);
+          try {
+            await this.updateProviderProfile(emailMatch.id, {
+              userId,
+              name: name || emailMatch.name,
+              businessName: businessName !== undefined ? businessName : emailMatch.business_name,
+              phone: phone !== undefined ? phone : emailMatch.phone,
+              bio: bio !== undefined ? bio : emailMatch.bio,
+            });
+            const linked = await this.getProviderByUserId(userId);
+            if (linked) return linked;
+          } catch {
+            // If RLS blocked updating unlinked provider from client, fall through to insert
+          }
         }
       }
     }
 
     // 3. Ensure slug is unique before insert
-    let finalSlug = slug || 'provider';
-    const { data: slugTaken } = await supabase
-      .from('providers')
-      .select('id')
-      .eq('slug', finalSlug)
-      .maybeSingle();
+    let baseSlug = slug || 'provider';
+    let finalSlug = baseSlug;
+    let isUnique = false;
+    let attempts = 0;
 
-    if (slugTaken && userId) {
-      finalSlug = `${finalSlug}-${userId.slice(0, 5)}`;
+    while (!isUnique && attempts < 5) {
+      const { data: slugTaken } = await supabase
+        .from('providers')
+        .select('id')
+        .eq('slug', finalSlug)
+        .maybeSingle();
+
+      if (!slugTaken) {
+        isUnique = true;
+      } else {
+        attempts++;
+        finalSlug = `${baseSlug}-${userId ? userId.slice(0, 4) : 'p'}-${Math.floor(Math.random() * 9000 + 1000)}`;
+      }
     }
 
     const { data, error } = await supabase
       .from('providers')
       .insert({
         user_id: userId,
-        name,
-        business_name: businessName,
+        name: name || 'Provider',
+        business_name: businessName || '',
         slug: finalSlug,
-        email,
-        phone,
-        bio,
+        email: email || '',
+        phone: phone || '',
+        bio: bio || '',
+        timezone: 'Asia/Kolkata',
+        buffer_time: 15,
+        min_notice: 2,
+        max_advance_booking: 30,
       })
       .select()
       .single();
