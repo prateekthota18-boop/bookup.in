@@ -115,6 +115,7 @@ function AuthLayout({ children, title, subtitle }) {
 
 import { supabase, isSupabaseConfigured } from '../services/supabase/supabaseClient';
 import { dbService } from '../services/supabase/dbService';
+import { generateSlug } from '../utils/helpers';
 
 export function Login() {
   const navigate = useNavigate();
@@ -152,8 +153,33 @@ export function Login() {
       }
 
       if (data?.user) {
-        // Fetch provider profile
-        const provider = await dbService.getProviderByUserId(data.user.id);
+        // Fetch or auto-resolve provider profile
+        let provider = await dbService.getProviderByUserId(data.user.id);
+        if (!provider && data.user.email) {
+          const { data: emailMatch } = await supabase
+            .from('providers')
+            .select('*')
+            .eq('email', data.user.email.trim().toLowerCase())
+            .maybeSingle();
+
+          if (emailMatch) {
+            await dbService.updateProviderProfile(emailMatch.id, { userId: data.user.id });
+            provider = await dbService.getProviderByUserId(data.user.id);
+          } else {
+            const provName = data.user.user_metadata?.name || data.user.email.split('@')[0] || 'Provider';
+            const provSlug = `${generateSlug(provName)}-${data.user.id.slice(0, 5)}`;
+            try {
+              await dbService.createProviderProfile({
+                userId: data.user.id,
+                name: provName,
+                slug: provSlug,
+                email: data.user.email,
+              });
+              provider = await dbService.getProviderByUserId(data.user.id);
+            } catch {}
+          }
+        }
+
         dispatch({
           type: ACTIONS.LOGIN,
           payload: {
@@ -169,7 +195,7 @@ export function Login() {
           addToast(`Welcome back, ${provider.name}! 👋`);
           navigate('/dashboard');
         } else {
-          // No profile yet, take to onboarding
+          // Fallback to onboarding if profile could not be auto-provisioned
           navigate('/onboarding');
         }
       }
@@ -306,6 +332,21 @@ export function Signup() {
         dispatch({ type: ACTIONS.SIGNUP, payload: user });
 
         if (data.session) {
+          // Immediately provision provider profile in Supabase so user is always linked
+          try {
+            const provSlug = `${generateSlug(form.name.trim())}-${data.user.id.slice(0, 5)}`;
+            const newProv = await dbService.createProviderProfile({
+              userId: data.user.id,
+              name: form.name.trim(),
+              slug: provSlug,
+              email,
+            });
+            if (newProv) {
+              dispatch({ type: ACTIONS.UPDATE_PROVIDER, payload: newProv });
+            }
+          } catch (_pErr) {
+            console.warn('Provider profile pre-provision note:', _pErr.message);
+          }
           addToast("Account created! Let's set up your booking page. 🚀");
           navigate('/onboarding');
         } else {

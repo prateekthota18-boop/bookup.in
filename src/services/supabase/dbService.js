@@ -75,13 +75,62 @@ export const dbService = {
   async createProviderProfile({ userId, name, businessName, slug, email, phone, bio }) {
     if (!isSupabaseConfigured()) return null;
 
+    // 1. If provider already exists for this userId, update and return it to prevent duplicates
+    if (userId) {
+      const existing = await this.getProviderByUserId(userId);
+      if (existing) {
+        await this.updateProviderProfile(existing.id, {
+          name: name || existing.name,
+          businessName: businessName !== undefined ? businessName : existing.businessName,
+          slug: slug || existing.slug,
+          email: email || existing.email,
+          phone: phone !== undefined ? phone : existing.phone,
+          bio: bio !== undefined ? bio : existing.bio,
+        });
+        return await this.getProviderByUserId(userId);
+      }
+
+      // 2. Check if an unlinked provider exists with the same email
+      if (email) {
+        const { data: emailMatch } = await supabase
+          .from('providers')
+          .select('*')
+          .eq('email', email.trim().toLowerCase())
+          .is('user_id', null)
+          .maybeSingle();
+
+        if (emailMatch) {
+          await this.updateProviderProfile(emailMatch.id, {
+            userId,
+            name: name || emailMatch.name,
+            businessName: businessName !== undefined ? businessName : emailMatch.business_name,
+            phone: phone !== undefined ? phone : emailMatch.phone,
+            bio: bio !== undefined ? bio : emailMatch.bio,
+          });
+          return await this.getProviderByUserId(userId);
+        }
+      }
+    }
+
+    // 3. Ensure slug is unique before insert
+    let finalSlug = slug || 'provider';
+    const { data: slugTaken } = await supabase
+      .from('providers')
+      .select('id')
+      .eq('slug', finalSlug)
+      .maybeSingle();
+
+    if (slugTaken && userId) {
+      finalSlug = `${finalSlug}-${userId.slice(0, 5)}`;
+    }
+
     const { data, error } = await supabase
       .from('providers')
       .insert({
         user_id: userId,
         name,
         business_name: businessName,
-        slug,
+        slug: finalSlug,
         email,
         phone,
         bio,
@@ -94,13 +143,28 @@ export const dbService = {
       throw error;
     }
 
-    return data;
+    return {
+      id: data.id,
+      userId: data.user_id,
+      name: data.name,
+      businessName: data.business_name || '',
+      slug: data.slug,
+      email: data.email || '',
+      phone: data.phone || '',
+      timezone: data.timezone || 'Asia/Kolkata',
+      bio: data.bio || '',
+      bufferTime: data.buffer_time ?? 15,
+      minNotice: data.min_notice ?? 2,
+      maxAdvanceBooking: data.max_advance_booking ?? 30,
+      createdAt: data.created_at,
+    };
   },
 
   async updateProviderProfile(providerId, fields) {
     if (!isSupabaseConfigured() || !providerId) return false;
 
     const updatePayload = {};
+    if (fields.userId !== undefined) updatePayload.user_id = fields.userId;
     if (fields.name !== undefined) updatePayload.name = fields.name;
     if (fields.businessName !== undefined) updatePayload.business_name = fields.businessName;
     if (fields.slug !== undefined) updatePayload.slug = fields.slug;

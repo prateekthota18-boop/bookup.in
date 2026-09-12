@@ -19,15 +19,26 @@ async function getAuthHeader() {
   return {};
 }
 
-const rawApiUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || '';
-const DEFAULT_API_BASE = rawApiUrl.trim()
-  ? `${rawApiUrl.trim().replace(/\/$/, '')}/api`
-  : '/api';
+function getApiBase() {
+  const envUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || '';
+  if (envUrl.trim()) {
+    return `${envUrl.trim().replace(/\/$/, '')}/api`;
+  }
+  // Production fallback for Vercel deployment if VITE_API_URL was omitted at build time
+  if (typeof window !== 'undefined' && window.location?.hostname?.includes('vercel.app')) {
+    return 'https://bookup-in.onrender.com/api';
+  }
+  return '/api';
+}
 
 export class RealGoogleCalendarProvider extends CalendarProvider {
-  constructor(apiBase = DEFAULT_API_BASE) {
+  constructor(apiBase) {
     super();
-    this.apiBase = apiBase;
+    this._customApiBase = apiBase;
+  }
+
+  get apiBase() {
+    return this._customApiBase || getApiBase();
   }
 
   /**

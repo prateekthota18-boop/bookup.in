@@ -311,7 +311,38 @@ export function StoreProvider({ children }) {
         return;
       }
 
-      const dashData = await dbService.getDashboardData(uid);
+      let dashData = await dbService.getDashboardData(uid);
+      if (!dashData?.provider) {
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (currentUser?.email) {
+          const { data: emailMatch } = await supabase
+            .from('providers')
+            .select('*')
+            .eq('email', currentUser.email.trim().toLowerCase())
+            .maybeSingle();
+
+          if (emailMatch) {
+            try {
+              await dbService.updateProviderProfile(emailMatch.id, { userId: currentUser.id });
+              dashData = await dbService.getDashboardData(uid);
+            } catch (_e) {}
+          } else {
+            const provName = currentUser.user_metadata?.name || currentUser.email.split('@')[0] || 'Provider';
+            const baseSlug = (provName || 'provider').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'provider';
+            const provSlug = `${baseSlug}-${currentUser.id.slice(0, 5)}`;
+            try {
+              await dbService.createProviderProfile({
+                userId: currentUser.id,
+                name: provName,
+                slug: provSlug,
+                email: currentUser.email,
+              });
+              dashData = await dbService.getDashboardData(uid);
+            } catch (_e) {}
+          }
+        }
+      }
+
       if (dashData && dashData.provider) {
         dispatch({
           type: ACTIONS.HYDRATE_DASHBOARD,

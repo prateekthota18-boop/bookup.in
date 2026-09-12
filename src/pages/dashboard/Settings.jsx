@@ -7,9 +7,9 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../../data/store';
 import { ACTIONS } from '../../data/actions';
-import { getInitials } from '../../utils/helpers';
+import { getInitials, generateSlug } from '../../utils/helpers';
 import { realGoogleCalendarService } from '../../services/calendar/RealGoogleCalendarProvider';
-import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
+import { supabase, isSupabaseConfigured } from '../../services/supabase/supabaseClient';
 import { dbService } from '../../services/supabase/dbService';
 
 export default function Settings() {
@@ -27,6 +27,17 @@ export default function Settings() {
   const [phone, setPhone] = useState(provider.phone || '');
   const [bioError, setBioError] = useState('');
   const [isConnectingGcal, setIsConnectingGcal] = useState(false);
+
+  // Sync state if provider is hydrated from Supabase
+  useEffect(() => {
+    if (state.provider) {
+      if (state.provider.name && !name) setName(state.provider.name);
+      if (state.provider.businessName && !businessName) setBusinessName(state.provider.businessName);
+      if (state.provider.bio && !bio) setBio(state.provider.bio);
+      if (state.provider.email && !email) setEmail(state.provider.email);
+      if (state.provider.phone && !phone) setPhone(state.provider.phone);
+    }
+  }, [state.provider]);
 
   // Handle return redirect from Google OAuth callback
   useEffect(() => {
@@ -88,17 +99,53 @@ export default function Settings() {
     }
     setBioError('');
 
-    if (!state.auth?.isDemoMode && isSupabaseConfigured() && state.provider?.id) {
+    if (!state.auth?.isDemoMode && isSupabaseConfigured()) {
       try {
-        await dbService.updateProviderProfile(state.provider.id, {
-          name,
-          businessName,
-          bio,
-          email,
-          phone,
-        });
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          const existingProv = await dbService.getProviderByUserId(authUser.id);
+          let savedProv = null;
+
+          if (existingProv?.id) {
+            await dbService.updateProviderProfile(existingProv.id, {
+              name,
+              businessName,
+              bio,
+              email: email || authUser.email,
+              phone,
+            });
+            savedProv = {
+              ...existingProv,
+              name,
+              businessName,
+              bio,
+              email: email || authUser.email,
+              phone,
+            };
+          } else {
+            const baseSlug = generateSlug(businessName || name || 'provider');
+            const slug = `${baseSlug}-${authUser.id.slice(0, 5)}`;
+            savedProv = await dbService.createProviderProfile({
+              userId: authUser.id,
+              name,
+              businessName,
+              slug,
+              email: email || authUser.email,
+              phone,
+              bio,
+            });
+          }
+
+          if (savedProv) {
+            dispatch({ type: ACTIONS.UPDATE_PROVIDER, payload: savedProv });
+            addToast('Profile updated ✓');
+            return;
+          }
+        }
       } catch (err) {
-        console.error('Failed to update profile in Supabase:', err);
+        console.error('Failed to save profile in Supabase:', err);
+        addToast(err.message || 'Failed to update profile in database', 'error');
+        return;
       }
     }
 
@@ -113,8 +160,34 @@ export default function Settings() {
   const handleConnectGcal = async () => {
     setIsConnectingGcal(true);
     try {
-      const providerId = provider?.id || 'provider-1';
-      await realGoogleCalendarService.connect({ providerId });
+      // Ensure provider profile exists in Supabase before requesting Google OAuth URL
+      let providerId = provider?.id;
+      if (!state.auth?.isDemoMode && isSupabaseConfigured()) {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          let prov = await dbService.getProviderByUserId(authUser.id);
+          if (!prov) {
+            const pName = name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Provider';
+            const baseSlug = generateSlug(businessName || pName);
+            const pSlug = `${baseSlug}-${authUser.id.slice(0, 5)}`;
+            prov = await dbService.createProviderProfile({
+              userId: authUser.id,
+              name: pName,
+              businessName: businessName || '',
+              slug: pSlug,
+              email: email || authUser.email,
+              phone: phone || '',
+              bio: bio || '',
+            });
+          }
+          if (prov?.id) {
+            providerId = prov.id;
+            dispatch({ type: ACTIONS.UPDATE_PROVIDER, payload: prov });
+          }
+        }
+      }
+
+      await realGoogleCalendarService.connect({ providerId: providerId || 'provider-1' });
     } catch (err) {
       console.error('Google OAuth init error:', err);
       addToast(err.message, 'error');
