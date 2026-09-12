@@ -41,58 +41,40 @@ function hashToken(token) {
 }
 
 /**
- * Internal helper to lookup booking by token hash or legacy fallback
+ * Internal helper to lookup booking strictly by token hash
+ * (with fallback to notes mgmt_hash tag for pre-migration records)
  */
 async function findBookingByToken(supabase, token) {
-  if (!token) return null;
+  if (!token || typeof token !== 'string') return null;
   const tokenHash = hashToken(token);
+  if (!tokenHash) return null;
 
   let data = null;
 
-  // 1. Check management_token_hash column
+  // 1. Check management_token_hash column (authoritative)
   try {
-    const { data: hashColMatch } = await supabase
+    const { data: hashColMatch, error: hashErr } = await supabase
       .from('bookings')
       .select('*, services (*), providers (*)')
       .eq('management_token_hash', tokenHash)
       .maybeSingle();
-    if (hashColMatch) data = hashColMatch;
+    if (!hashErr && hashColMatch) data = hashColMatch;
   } catch (_e) {
     // Column may be pending migration
   }
 
-  // 2. Check management_token column
+  // 2. Backward compatibility fallback: Check notes column for [mgmt_hash:<tokenHash>]
   if (!data) {
     try {
-      const { data: tokenColMatch } = await supabase
+      const { data: noteMatch, error: noteErr } = await supabase
         .from('bookings')
         .select('*, services (*), providers (*)')
-        .eq('management_token', tokenHash)
+        .ilike('notes', `%[mgmt_hash:${tokenHash}]%`)
         .maybeSingle();
-      if (tokenColMatch) data = tokenColMatch;
+      if (!noteErr && noteMatch) data = noteMatch;
     } catch (_e) {
-      // Column may be pending migration
+      // Notes query fallback
     }
-  }
-
-  // 3. Check notes column for [mgmt_hash:<tokenHash>]
-  if (!data) {
-    const { data: noteMatch } = await supabase
-      .from('bookings')
-      .select('*, services (*), providers (*)')
-      .ilike('notes', `%[mgmt_hash:${tokenHash}]%`)
-      .maybeSingle();
-    if (noteMatch) data = noteMatch;
-  }
-
-  // 4. Safe fallback for UUID / legacy booking ID lookup
-  if (!data && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) {
-    const { data: idMatch } = await supabase
-      .from('bookings')
-      .select('*, services (*), providers (*)')
-      .eq('id', token)
-      .maybeSingle();
-    if (idMatch) data = idMatch;
   }
 
   return data;

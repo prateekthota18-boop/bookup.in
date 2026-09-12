@@ -493,61 +493,45 @@ export const dbService = {
 
     let data = null;
 
-    // 1. Hash the token and search by notes containing [mgmt_hash:<hash>]
+    // 1. Hash the token and search by management_token_hash or notes tag
     try {
       const tokenHash = await hashManagementToken(trimmed);
       if (tokenHash) {
-        const { data: noteMatch } = await supabase
-          .from('bookings')
-          .select(`
-            *,
-            services (*),
-            providers (*)
-          `)
-          .ilike('notes', `%[mgmt_hash:${tokenHash}]%`)
-          .maybeSingle();
-
-        if (noteMatch) {
-          data = noteMatch;
+        // Authoritative: Check management_token_hash column
+        try {
+          const { data: colMatch, error: colErr } = await supabase
+            .from('bookings')
+            .select(`
+              *,
+              services (*),
+              providers (*)
+            `)
+            .eq('management_token_hash', tokenHash)
+            .maybeSingle();
+          if (!colErr && colMatch) data = colMatch;
+        } catch {
+          // Column may not exist yet
         }
 
-        // Also check if management_token column exists and matches
+        // Backward compatibility fallback: notes containing [mgmt_hash:<hash>]
         if (!data) {
-          try {
-            const { data: colMatch } = await supabase
-              .from('bookings')
-              .select(`
-                *,
-                services (*),
-                providers (*)
-              `)
-              .eq('management_token', tokenHash)
-              .maybeSingle();
-            if (colMatch) data = colMatch;
-          } catch {
-            // Column may not exist yet
+          const { data: noteMatch } = await supabase
+            .from('bookings')
+            .select(`
+              *,
+              services (*),
+              providers (*)
+            `)
+            .ilike('notes', `%[mgmt_hash:${tokenHash}]%`)
+            .maybeSingle();
+
+          if (noteMatch) {
+            data = noteMatch;
           }
         }
       }
     } catch (e) {
       console.warn('Token hash lookup warning:', e);
-    }
-
-    // 2. Fallback: Lookup by ID if token looks like UUID or legacy ID
-    if (!data) {
-      const { data: idMatch } = await supabase
-        .from('bookings')
-        .select(`
-          *,
-          services (*),
-          providers (*)
-        `)
-        .eq('id', trimmed)
-        .maybeSingle();
-
-      if (idMatch) {
-        data = idMatch;
-      }
     }
 
     if (!data) return null;
@@ -646,7 +630,10 @@ export const dbService = {
       : notes;
 
     // Attempt RPC first (enforcing lock in PostgreSQL)
-    const { data: rpcResult, error: rpcError } = await supabase.rpc('create_booking_atomic', {
+    let rpcResult = null;
+    let rpcError = null;
+
+    const rpcPayload = {
       p_provider_id: providerId,
       p_service_id: serviceId,
       p_customer_name: customerName,
@@ -656,7 +643,20 @@ export const dbService = {
       p_booking_date: bookingDate,
       p_start_time: startTime,
       p_notes: finalNotes,
-    });
+      p_management_token_hash: managementTokenHash || null,
+    };
+
+    const resWithHash = await supabase.rpc('create_booking_atomic', rpcPayload);
+    if (resWithHash.error && (resWithHash.error.message?.includes('p_management_token_hash') || resWithHash.error.code === 'PGRST202')) {
+      // Fallback for previous RPC signature
+      delete rpcPayload.p_management_token_hash;
+      const resLegacy = await supabase.rpc('create_booking_atomic', rpcPayload);
+      rpcResult = resLegacy.data;
+      rpcError = resLegacy.error;
+    } else {
+      rpcResult = resWithHash.data;
+      rpcError = resWithHash.error;
+    }
 
     if (!rpcError && rpcResult) {
       if (rpcResult.success === false) {
@@ -667,10 +667,10 @@ export const dbService = {
         try {
           await supabase
             .from('bookings')
-            .update({ management_token: managementTokenHash })
+            .update({ management_token_hash: managementTokenHash })
             .eq('id', rpcBookingId);
         } catch {
-          // Ignore if column doesn't exist
+          // Ignore if column doesn't exist yet or restricted
         }
       }
       return rpcResult;
@@ -729,42 +729,36 @@ export const dbService = {
       throw new Error('This slot is no longer available. Please select another time.');
     }
 
-    // Insert booking
+    // Insert booking (including management_token_hash directly)
+    const insertPayload = {
+      provider_id: providerId,
+      service_id: svc.id,
+      customer_name: customerName,
+      customer_email: customerEmail || '',
+      customer_phone: customerPhone,
+      customer_whatsapp: customerWhatsApp || customerPhone,
+      booking_date: bookingDate,
+      start_time: startTime,
+      end_time: endTime,
+      duration: svc.duration,
+      price: svc.price,
+      deposit_amount: svc.deposit_amount || 0,
+      deposit_status: svc.deposit_amount > 0 ? 'paid' : 'na',
+      status: 'confirmed',
+      notes: finalNotes,
+    };
+    if (managementTokenHash) {
+      insertPayload.management_token_hash = managementTokenHash;
+    }
+
     const { data: newBooking, error: insertErr } = await supabase
       .from('bookings')
-      .insert({
-        provider_id: providerId,
-        service_id: svc.id,
-        customer_name: customerName,
-        customer_email: customerEmail || '',
-        customer_phone: customerPhone,
-        customer_whatsapp: customerWhatsApp || customerPhone,
-        booking_date: bookingDate,
-        start_time: startTime,
-        end_time: endTime,
-        duration: svc.duration,
-        price: svc.price,
-        deposit_amount: svc.deposit_amount || 0,
-        deposit_status: svc.deposit_amount > 0 ? 'paid' : 'na',
-        status: 'confirmed',
-        notes: finalNotes,
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
     if (insertErr) {
       throw new Error(insertErr.message);
-    }
-
-    if (newBooking?.id && managementTokenHash) {
-      try {
-        await supabase
-          .from('bookings')
-          .update({ management_token: managementTokenHash })
-          .eq('id', newBooking.id);
-      } catch {
-        // Safe to ignore if column is not yet present
-      }
     }
 
     return {
@@ -839,17 +833,33 @@ export const dbService = {
   // PUBLIC BOOKING PAGE BUNDLE LOADER
   // ===========================================================================
 
+  /**
+   * Get provider busy time intervals without exposing customer PII
+   */
+  async getBusySlots(providerId, date) {
+    if (!isSupabaseConfigured() || !providerId || !date) return [];
+    try {
+      const { data, error } = await supabase.rpc('get_provider_busy_slots', {
+        p_provider_id: providerId,
+        p_booking_date: date,
+      });
+      if (!error && Array.isArray(data)) return data;
+    } catch {
+      // Fallback
+    }
+    return [];
+  },
+
   async getPublicBookingData(slug) {
     if (!isSupabaseConfigured() || !slug) return null;
 
     const provider = await this.getProviderBySlug(slug);
     if (!provider) return null;
 
-    // Parallel fetch services, availability, bookings, and policies
-    const [services, availabilitySchedule, bookings, policy] = await Promise.all([
+    // Parallel fetch services, availability, and policies (NO customer PII or bookings)
+    const [services, availabilitySchedule, policy] = await Promise.all([
       this.getServices(provider.id, true),
       this.getAvailability(provider.id),
-      this.getBookings(provider.id),
       this.getPolicy(provider.id),
     ]);
 
@@ -864,7 +874,7 @@ export const dbService = {
       provider,
       services,
       availability,
-      bookings,
+      bookings: [],
       policies: policy,
     };
   },

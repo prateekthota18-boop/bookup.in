@@ -81,6 +81,7 @@ create table if not exists public.bookings (
   status text not null default 'confirmed', -- 'confirmed', 'completed', 'cancelled', 'no-show', 'late-cancellation'
   notes text,
   google_event_id text,
+  management_token_hash text,
   created_at timestamptz default now() not null,
   updated_at timestamptz default now() not null
 );
@@ -106,6 +107,7 @@ create index if not exists idx_services_provider_id on public.services(provider_
 create index if not exists idx_availability_provider_id on public.availability(provider_id);
 create index if not exists idx_bookings_provider_date on public.bookings(provider_id, booking_date);
 create index if not exists idx_bookings_status on public.bookings(status);
+create index if not exists idx_bookings_management_token_hash on public.bookings(management_token_hash);
 create index if not exists idx_customers_phone on public.customers(phone);
 
 -- =============================================================================
@@ -188,27 +190,29 @@ create policy "Anyone can update customer contact upon booking"
   using (true);
 
 -- 5. Bookings Policies
--- Anyone can view existing booking time ranges to calculate busy slots; providers can see full details
-create policy "Public can view bookings for slot collision checks"
+-- Authenticated providers can view ONLY their own bookings (anon has no SELECT access; customers access via server API)
+create policy "Providers can view own bookings"
   on public.bookings for select
-  using (true);
+  to authenticated
+  using (provider_id in (select id from public.providers where user_id = auth.uid()));
 
 -- Anyone can insert a booking (used by public booking page and atomic RPC)
 create policy "Public can create a booking"
   on public.bookings for insert
+  to anon, authenticated
   with check (true);
 
--- Providers can update their bookings (status, notes, etc.)
+-- Authenticated providers can update ONLY their own bookings (customers reschedule/cancel via server API)
 create policy "Providers can update own bookings"
   on public.bookings for update
-  using (
-    provider_id in (select id from public.providers where user_id = auth.uid())
-    or true -- allows customer self-serve reschedule / cancellation via /booking/:id
-  );
+  to authenticated
+  using (provider_id in (select id from public.providers where user_id = auth.uid()))
+  with check (provider_id in (select id from public.providers where user_id = auth.uid()));
 
--- Providers can delete bookings
+-- Providers can delete own bookings
 create policy "Providers can delete own bookings"
   on public.bookings for delete
+  to authenticated
   using (provider_id in (select id from public.providers where user_id = auth.uid()));
 
 -- 6. Cancellation Policies Policies
@@ -225,6 +229,31 @@ create policy "Providers can update own cancellation policy"
   using (provider_id in (select id from public.providers where user_id = auth.uid()));
 
 -- =============================================================================
+-- PROVIDER BUSY SLOTS FUNCTION (Sanitized Time Slots, NO Customer PII)
+-- =============================================================================
+create or replace function public.get_provider_busy_slots(
+  p_provider_id uuid,
+  p_booking_date date
+)
+returns table (
+  start_time text,
+  end_time text,
+  actual_end_time text,
+  status text
+)
+language sql
+security definer
+as $$
+  select start_time, end_time, actual_end_time, status
+  from public.bookings
+  where provider_id = p_provider_id
+    and booking_date = p_booking_date
+    and status in ('confirmed', 'completed');
+$$;
+
+grant execute on function public.get_provider_busy_slots(uuid, date) to anon, authenticated, service_role;
+
+-- =============================================================================
 -- ATOMIC BOOKING FUNCTION (Double-Booking & Conflict Protection)
 -- =============================================================================
 create or replace function public.create_booking_atomic(
@@ -236,7 +265,8 @@ create or replace function public.create_booking_atomic(
   p_customer_whatsapp text,
   p_booking_date date,
   p_start_time text,
-  p_notes text default ''
+  p_notes text default '',
+  p_management_token_hash text default null
 ) returns json language plpgsql security definer as $$
 declare
   v_service record;
@@ -337,7 +367,8 @@ begin
     deposit_amount,
     deposit_status,
     status,
-    notes
+    notes,
+    management_token_hash
   ) values (
     p_provider_id,
     v_service.id,
@@ -354,7 +385,8 @@ begin
     coalesce(v_service.deposit_amount, 0),
     case when coalesce(v_service.deposit_amount, 0) > 0 then 'paid' else 'na' end,
     'confirmed',
-    p_notes
+    p_notes,
+    p_management_token_hash
   ) returning id into v_booking_id;
 
   return json_build_object(
@@ -368,14 +400,22 @@ end;
 $$;
 
 -- =============================================================================
--- ROLE PRIVILEGES (Required for anon and authenticated API roles)
+-- ROLE PRIVILEGES
 -- =============================================================================
 grant usage on schema public to anon, authenticated;
-grant all on all tables in schema public to anon, authenticated;
+grant all on all tables in schema public to authenticated;
 grant all on all sequences in schema public to anon, authenticated;
 grant all on all routines in schema public to anon, authenticated;
 
-alter default privileges in schema public grant all on tables to anon, authenticated;
+-- Direct table access for anon:
+-- Allow read on public metadata (providers, active services, availability, policies)
+grant select on public.providers, public.services, public.availability, public.cancellation_policies to anon;
+grant insert on public.customers, public.bookings to anon;
+
+-- STRICT: anon cannot directly SELECT, UPDATE, or DELETE on bookings
+revoke select, update, delete on public.bookings from anon;
+
+alter default privileges in schema public grant all on tables to authenticated;
 alter default privileges in schema public grant all on sequences to anon, authenticated;
 alter default privileges in schema public grant all on routines to anon, authenticated;
 

@@ -60,29 +60,17 @@ export const customerBookingService = {
     }
 
     const apiBase = getApiBase();
-    try {
-      const res = await fetch(`${apiBase}/public/bookings/manage/${encodeURIComponent(token)}/reschedule`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ newDate, newTime }),
-      });
+    const res = await fetch(`${apiBase}/public/bookings/manage/${encodeURIComponent(token)}/reschedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ newDate, newTime }),
+    });
 
-      const result = await res.json();
-      if (!res.ok) {
-        throw new Error(result.error || 'Failed to reschedule appointment');
-      }
-      return result;
-    } catch (apiErr) {
-      // If network failure and Supabase configured, attempt fallback
-      if (isSupabaseConfigured() && !apiErr.message.includes('cannot be rescheduled')) {
-        const [h, m] = newTime.split(':').map(Number);
-        const endMinutes = h * 60 + m + 60; // default duration
-        const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
-        await dbService.rescheduleBooking(token, newDate, newTime, endTime);
-        return { success: true };
-      }
-      throw apiErr;
+    const result = await res.json();
+    if (!res.ok) {
+      throw new Error(result.error || 'Failed to reschedule appointment');
     }
+    return result;
   },
 
   /**
@@ -92,23 +80,15 @@ export const customerBookingService = {
     if (!token) throw new Error('Management token is required');
     const apiBase = getApiBase();
 
-    try {
-      const res = await fetch(`${apiBase}/public/bookings/manage/${encodeURIComponent(token)}/cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      });
+    const res = await fetch(`${apiBase}/public/bookings/manage/${encodeURIComponent(token)}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    });
 
-      const result = await res.json();
-      if (!res.ok) {
-        throw new Error(result.error || 'Failed to cancel appointment');
-      }
-      return result;
-    } catch (apiErr) {
-      if (isSupabaseConfigured()) {
-        await dbService.updateBookingStatus(token, 'cancelled');
-        return { success: true, status: 'cancelled' };
-      }
-      throw apiErr;
+    const result = await res.json();
+    if (!res.ok) {
+      throw new Error(result.error || 'Failed to cancel appointment');
     }
+    return result;
   },
 };

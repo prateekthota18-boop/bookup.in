@@ -46,18 +46,22 @@ export default function CustomerBooking() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // Resolve booking from state or demo fallback for immediate rendering
   const [supabaseBookingData, setSupabaseBookingData] = useState(null);
   const bookingInState = state.bookings?.find(
-    b => b.managementToken === lookupIdentifier || b.id === lookupIdentifier
+    b => b.managementToken === lookupIdentifier
   );
   const demoBooking = DEMO_BOOKINGS.find(
-    b => b.managementToken === lookupIdentifier || b.id === lookupIdentifier
+    b => b.managementToken === lookupIdentifier
   );
-  const resolvedBooking = supabaseBookingData?.booking || bookingInState || demoBooking || null;
+
+  // Authoritative server projection is source of truth.
+  // In-memory state only provides instant optimistic render if the customer just completed booking with matching token.
+  const resolvedBooking = isSupabaseConfigured()
+    ? (supabaseBookingData?.booking || (isJustConfirmed && bookingInState ? bookingInState : null))
+    : (supabaseBookingData?.booking || bookingInState || demoBooking || null);
 
   const [isLoading, setIsLoading] = useState(
-    () => !bookingInState && !demoBooking && Boolean(lookupIdentifier) && isSupabaseConfigured()
+    () => !resolvedBooking && Boolean(lookupIdentifier) && isSupabaseConfigured()
   );
 
   const hasBookings = Boolean(state.bookings && state.bookings.length > 0);
