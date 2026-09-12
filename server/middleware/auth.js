@@ -223,7 +223,14 @@ export async function requireProviderAuth(req, res, next) {
     }
 
     if (!provider) {
-      console.error(`[AUTH] No provider profile linked to authenticated user ${user.id} and provisioning failed`);
+      console.error(`[AUTH] No provider profile linked to authenticated user ${user.id}`);
+      if (lookupErr?.code === '42501') {
+        console.error('[AUTH] Supabase 42501: service_role lacks SELECT/INSERT grants on public.providers. Run: GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role; in Supabase SQL Editor.');
+        return res.status(500).json({
+          success: false,
+          error: 'Database permission error (42501): The service_role is missing table grants in Supabase. Run "GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;" in Supabase SQL Editor.',
+        });
+      }
       return res.status(403).json({ success: false, error: 'No provider profile linked to authenticated user' });
     }
 
