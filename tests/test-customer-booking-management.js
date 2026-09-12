@@ -70,9 +70,9 @@ async function runComprehensiveSuite() {
 
   try {
     // -------------------------------------------------------------------------
-    // TEST 1: Create booking → appointment persists → token & URL generated
+    // [TEST A] BOOKING → MANAGEMENT TOKEN & HASH GENERATION
     // -------------------------------------------------------------------------
-    console.log('--- TEST 1: CREATE BOOKING & TOKEN GENERATION ---');
+    console.log('\n--- [TEST A] BOOKING → CRYPTOGRAPHIC MANAGEMENT TOKEN GENERATION ---');
     const tokenA = generateManagementToken();
     const tokenHashA = await hashManagementToken(tokenA);
     const managementUrlA = buildManagementUrl(tokenA);
@@ -110,19 +110,14 @@ async function runComprehensiveSuite() {
     if (errA) throw errA;
     createdBookingIds.push(bookingA.id);
     assert(Boolean(bookingA?.id), `Appointment A successfully persisted in Supabase (${bookingA.id})`);
-
-    // -------------------------------------------------------------------------
-    // TEST 2: Token Hash Persistence & Raw Token Non-Persistence
-    // -------------------------------------------------------------------------
-    console.log('\n--- TEST 2: RAW TOKEN NON-PERSISTENCE VERIFICATION ---');
     assert(bookingA.management_token === undefined || bookingA.management_token === null, 'Raw management_token column does NOT exist in persisted record');
     assert(!JSON.stringify(bookingA).includes(tokenA), 'Raw management token string is NEVER persisted anywhere in Supabase');
     assert(tokenHashA.length === 64, 'Database stores only 64-char SHA-256 management token hash');
 
     // -------------------------------------------------------------------------
-    // TEST 3: Open management URL → appointment loads & response is sanitized
+    // [TEST B] MANAGEMENT URL → BOOKING RETRIEVAL & RESPONSE SANITIZATION
     // -------------------------------------------------------------------------
-    console.log('\n--- TEST 3: OPEN MANAGEMENT URL & RESPONSE SANITIZATION ---');
+    console.log('\n--- [TEST B] MANAGEMENT URL → BOOKING RETRIEVAL & PROJECTION ---');
     const res2 = await fetch(`${API_BASE}/public/bookings/manage/${tokenA}`);
     assert(res2.status === 200, `Management endpoint returned HTTP 200 (received ${res2.status})`);
     const data2 = await res2.json();
@@ -136,19 +131,15 @@ async function runComprehensiveSuite() {
     assert(!JSON.stringify(data2).includes('access_token'), 'No OAuth or calendar tokens leaked in customer API response');
 
     // -------------------------------------------------------------------------
-    // TEST 4: Refresh management URL → appointment still loads
+    // [TEST C] REFRESH / REOPEN PERSISTENCE
     // -------------------------------------------------------------------------
-    console.log('\n--- TEST 4: REFRESH MANAGEMENT URL ---');
+    console.log('\n--- [TEST C] REFRESH & REOPEN PERSISTENCE ---');
     const res3 = await fetch(`${API_BASE}/public/bookings/manage/${tokenA}`, { cache: 'reload' });
     assert(res3.status === 200, 'Page refresh simulation returned HTTP 200');
     const data3 = await res3.json();
     assert(data3.booking?.id === bookingA.id, 'Appointment persists across page refresh');
 
-    // -------------------------------------------------------------------------
-    // TEST 5: Close browser simulation → reopen same URL → appointment still loads
-    // -------------------------------------------------------------------------
-    console.log('\n--- TEST 5: CLOSE BROWSER SIMULATION & REOPEN ---');
-    // Fresh request with no cookies, sessions, or headers
+    // Fresh request with no cookies, sessions, or headers (close & reopen browser simulation)
     const res4 = await fetch(`${API_BASE}/public/bookings/manage/${tokenA}`, {
       headers: { Accept: 'application/json' },
     });
@@ -157,18 +148,14 @@ async function runComprehensiveSuite() {
     assert(data4.booking?.id === bookingA.id, 'Data reloaded faithfully from Supabase');
 
     // -------------------------------------------------------------------------
-    // TEST 5: Open management URL without BookUp authentication → appointment loads
+    // [TEST D] INCOGNITO / NO AUTHENTICATION REQUIRED
     // -------------------------------------------------------------------------
-    console.log('\n--- TEST 5: UNAUTHENTICATED PUBLIC ACCESS ---');
+    console.log('\n--- [TEST D] INCOGNITO / NO AUTHENTICATION REQUIRED ---');
     const res5 = await fetch(`${API_BASE}/public/bookings/manage/${tokenA}`, {
       headers: { Authorization: '' },
     });
     assert(res5.status === 200, 'Unauthenticated customer successfully loads appointment without credentials');
 
-    // -------------------------------------------------------------------------
-    // TEST 6: Use incognito-style unauthenticated request → appointment loads
-    // -------------------------------------------------------------------------
-    console.log('\n--- TEST 6: INCOGNITO / PRIVATE BROWSING REQUEST ---');
     const res6 = await fetch(`${API_BASE}/public/bookings/manage/${tokenA}`, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
@@ -181,9 +168,9 @@ async function runComprehensiveSuite() {
     assert(res6.status === 200, 'Incognito-mode customer loads appointment without prompt');
 
     // -------------------------------------------------------------------------
-    // TEST 7: Reschedule appointment → appointment updates in Supabase → same token
+    // [TEST E] RESCHEDULE PERSISTENCE & CONFLICTS
     // -------------------------------------------------------------------------
-    console.log('\n--- TEST 7: RESCHEDULE APPOINTMENT VIA TOKEN ---');
+    console.log('\n--- [TEST E] RESCHEDULE PERSISTENCE & CONFLICT VALIDATION ---');
     const newDateA = '2026-10-18';
     const newTimeA = '14:00';
     const res7 = await fetch(`${API_BASE}/public/bookings/manage/${tokenA}/reschedule`, {
@@ -201,19 +188,16 @@ async function runComprehensiveSuite() {
     assert(dbBookingRescheduled.booking_date === newDateA, `Supabase booking_date updated in database: ${dbBookingRescheduled.booking_date}`);
     assert(dbBookingRescheduled.start_time.startsWith(newTimeA), `Supabase start_time updated: ${dbBookingRescheduled.start_time}`);
 
-    // -------------------------------------------------------------------------
-    // TEST 8: Refresh after rescheduling → new date/time appears
-    // -------------------------------------------------------------------------
-    console.log('\n--- TEST 8: REFRESH AFTER RESCHEDULING ---');
+    // Refresh after rescheduling reflects updated appointment
     const res8 = await fetch(`${API_BASE}/public/bookings/manage/${tokenA}`);
     const data8 = await res8.json();
     assert(data8.booking?.date === newDateA, `Refreshed page displays newly rescheduled date: ${data8.booking?.date}`);
     assert(data8.booking?.startTime === newTimeA, `Refreshed page displays newly rescheduled time: ${data8.booking?.startTime}`);
 
     // -------------------------------------------------------------------------
-    // TEST 9: Cancel appointment → appointment status persists as cancelled
+    // [TEST F] CANCELLATION PERSISTENCE
     // -------------------------------------------------------------------------
-    console.log('\n--- TEST 9: CANCEL APPOINTMENT ---');
+    console.log('\n--- [TEST F] CANCELLATION PERSISTENCE ---');
     const res9 = await fetch(`${API_BASE}/public/bookings/manage/${tokenA}/cancel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -226,19 +210,16 @@ async function runComprehensiveSuite() {
     const { data: dbBookingCancelled } = await supabase.from('bookings').select('status').eq('id', bookingA.id).single();
     assert(dbBookingCancelled.status === 'cancelled' || dbBookingCancelled.status === 'late-cancellation', `Supabase status persisted as: ${dbBookingCancelled.status}`);
 
-    // -------------------------------------------------------------------------
-    // TEST 10: Refresh after cancellation → cancelled state remains
-    // -------------------------------------------------------------------------
-    console.log('\n--- TEST 10: REFRESH AFTER CANCELLATION ---');
+    // Refresh retains cancelled state
     const res10 = await fetch(`${API_BASE}/public/bookings/manage/${tokenA}`);
     const data10 = await res10.json();
     assert(data10.booking?.status === 'cancelled' || data10.booking?.status === 'late-cancellation', 'Cancelled status is retained after page refresh');
     assert(data10.isManageable === false, 'isManageable flag is correctly false for cancelled booking');
 
     // -------------------------------------------------------------------------
-    // TEST 11: Attempt to reschedule cancelled appointment → backend rejects
+    // [TEST G] CANCELLED BOOKING CANNOT RESCHEDULE
     // -------------------------------------------------------------------------
-    console.log('\n--- TEST 11: RESCHEDULE CANCELLED APPOINTMENT REJECTION ---');
+    console.log('\n--- [TEST G] CANCELLED BOOKING CANNOT RESCHEDULE ---');
     const res11 = await fetch(`${API_BASE}/public/bookings/manage/${tokenA}/reschedule`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -249,9 +230,9 @@ async function runComprehensiveSuite() {
     assert(data11.error?.toLowerCase().includes('cannot be rescheduled') || data11.error?.toLowerCase().includes('cancelled'), 'Error message clearly states cancelled appointments cannot be rescheduled');
 
     // -------------------------------------------------------------------------
-    // TEST 12: Create second booking → different secure token generated
+    // [TEST I] TWO DIFFERENT BOOKINGS RECEIVE DIFFERENT TOKENS
     // -------------------------------------------------------------------------
-    console.log('\n--- TEST 12: SECOND BOOKING & TOKEN DIVERSITY ---');
+    console.log('\n--- [TEST I] TWO DIFFERENT BOOKINGS RECEIVE DIFFERENT TOKENS ---');
     const tokenB = generateManagementToken();
     const tokenHashB = await hashManagementToken(tokenB);
     assert(tokenA !== tokenB, 'Token A and Token B are completely distinct and independent');
@@ -284,54 +265,37 @@ async function runComprehensiveSuite() {
     assert(Boolean(bookingB?.id), `Appointment B persisted in Supabase (${bookingB.id})`);
 
     // -------------------------------------------------------------------------
-    // TEST 13: Use customer A token → customer A appointment only
+    // [TEST H] TOKEN ISOLATION ENFORCEMENT
     // -------------------------------------------------------------------------
-    console.log('\n--- TEST 13: TOKEN A ACCESSES ONLY APPOINTMENT A ---');
+    console.log('\n--- [TEST H] TOKEN ISOLATION ENFORCEMENT ---');
     const res13 = await fetch(`${API_BASE}/public/bookings/manage/${tokenA}`);
     const data13 = await res13.json();
     assert(data13.booking?.id === bookingA.id, `Token A returned Appointment A (${bookingA.id})`);
     assert(data13.booking?.customerName === customerNameA, `Token A returns Customer A (${customerNameA})`);
-
-    // -------------------------------------------------------------------------
-    // TEST 14: Attempt to use customer A token to access customer B appointment
-    // -------------------------------------------------------------------------
-    console.log('\n--- TEST 14: TOKEN ISOLATION ENFORCEMENT ---');
     assert(data13.booking?.id !== bookingB.id, 'Token A cannot resolve or access Appointment B');
     assert(data13.booking?.customerName !== customerNameB, 'Token A cannot access Customer B details');
 
-    // -------------------------------------------------------------------------
-    // TEST 15: Try invalid/random token → 404 response
-    // -------------------------------------------------------------------------
-    console.log('\n--- TEST 15: INVALID / UNRECOGNIZED TOKEN HANDLING ---');
+    // Random/invalid token
     const fakeToken = 'random_invalid_token_999999999999999999';
     const res15 = await fetch(`${API_BASE}/public/bookings/manage/${fakeToken}`);
     assert(res15.status === 404, `Invalid token returned HTTP 404 (received ${res15.status})`);
     const data15 = await res15.json();
     assert(data15.success === false, 'Response indicates failure for fake token');
 
-    // -------------------------------------------------------------------------
-    // TEST 16: Modified token handling → 404 response
-    // -------------------------------------------------------------------------
-    console.log('\n--- TEST 16: MODIFIED TOKEN REJECTION ---');
+    // Modified token
     const modifiedToken = tokenA.slice(0, -1) + (tokenA.slice(-1) === 'a' ? 'b' : 'a');
     const res16 = await fetch(`${API_BASE}/public/bookings/manage/${modifiedToken}`);
     assert(res16.status === 404, `Modified token returned HTTP 404 (received ${res16.status})`);
     const data16 = await res16.json();
     assert(data16.success === false, 'Modified token correctly rejected with 404');
 
-    // -------------------------------------------------------------------------
-    // TEST 17: URL / parameter manipulation with internal UUID → 404 response
-    // -------------------------------------------------------------------------
-    console.log('\n--- TEST 17: URL MANIPULATION WITH INTERNAL UUID REJECTION ---');
+    // Internal UUID manipulation attempt
     const res17 = await fetch(`${API_BASE}/public/bookings/manage/${bookingB.id}`);
     assert(res17.status === 404, `Querying by internal appointment UUID returns HTTP 404 (received ${res17.status})`);
     const data17 = await res17.json();
     assert(data17.success === false, 'Internal UUID cannot bypass token hash authentication');
 
-    // -------------------------------------------------------------------------
-    // TEST 18: Completed/non-manageable appointment → rejected for reschedule
-    // -------------------------------------------------------------------------
-    console.log('\n--- TEST 18: COMPLETED APPOINTMENT RESCHEDULE REJECTION ---');
+    // Completed booking reschedule rejection
     await supabase.from('bookings').update({ status: 'completed' }).eq('id', bookingB.id);
     const res18 = await fetch(`${API_BASE}/public/bookings/manage/${tokenB}/reschedule`, {
       method: 'POST',
@@ -341,19 +305,12 @@ async function runComprehensiveSuite() {
     assert(res18.status === 400, `Completed appointment reschedule rejected with HTTP 400 (received ${res18.status})`);
     const data18 = await res18.json();
     assert(data18.error?.toLowerCase().includes('completed') || data18.error?.toLowerCase().includes('cannot be rescheduled'), 'Clear error on completed appointment reschedule');
-
-    // Restore booking B to confirmed for remaining tests
     await supabase.from('bookings').update({ status: 'confirmed' }).eq('id', bookingB.id);
 
-    // -------------------------------------------------------------------------
-    // TEST 19: Attempt reschedule to occupied slot → rejected (409 conflict)
-    // -------------------------------------------------------------------------
-    console.log('\n--- TEST 19: OCCUPIED SLOT CONFLICT REJECTION ---');
-    // Create an occupying booking on 2026-10-28 at 10:00-11:00
+    // Slot collision check
     const occupiedDate = '2026-10-28';
     const occupiedStart = '10:00';
     const occupiedEnd = '11:00';
-
     const { data: occupyingBooking } = await supabase
       .from('bookings')
       .insert({
@@ -373,10 +330,8 @@ async function runComprehensiveSuite() {
       })
       .select()
       .single();
-
     if (occupyingBooking?.id) createdBookingIds.push(occupyingBooking.id);
 
-    // Attempt to reschedule booking B into the occupied slot
     const res19 = await fetch(`${API_BASE}/public/bookings/manage/${tokenB}/reschedule`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -386,19 +341,13 @@ async function runComprehensiveSuite() {
     const data19 = await res19.json();
     assert(data19.error?.toLowerCase().includes('no longer available') || data19.error?.toLowerCase().includes('conflict'), 'Conflict error clearly reported');
 
-    // -------------------------------------------------------------------------
-    // TEST 20: Reschedule conflicting with Google Calendar busy time → rejected
-    // -------------------------------------------------------------------------
-    console.log('\n--- TEST 20: GOOGLE CALENDAR BUSY TIME CONFLICT ---');
+    // Google calendar endpoint test
     const res20 = await fetch(`${API_BASE}/calendar/busy?providerId=${provider.id}&date=${occupiedDate}`);
     assert(res20.status === 200, 'Provider busy times query succeeds');
     const data20 = await res20.json();
     assert(data20.success === true, 'Calendar busy endpoint functional');
 
-    // -------------------------------------------------------------------------
-    // TEST 21: WhatsApp confirmation contains management URL
-    // -------------------------------------------------------------------------
-    console.log('\n--- TEST 21: WHATSAPP CONFIRMATION PREVIEW URL ---');
+    // WhatsApp URL preview verification
     const waMsg = whatsAppService.generateConfirmationMessage(
       { customerName: 'Simulated User', serviceName: service.name, date: '2026-10-30', startTime: '12:00', endTime: '13:00' },
       provider,
@@ -408,27 +357,23 @@ async function runComprehensiveSuite() {
     assert(waMsg.includes('Manage your booking:'), 'WhatsApp preview has "Manage your booking:" label');
 
     // -------------------------------------------------------------------------
-    // TEST 22: Directly navigate to production-style /manage/<token>
+    // [TEST J] VERCEL DEEP-LINK COMPATIBILITY & ROUTING
     // -------------------------------------------------------------------------
-    console.log('\n--- TEST 22: DIRECT NAVIGATION TO PRODUCTION-STYLE ROUTE ---');
+    console.log('\n--- [TEST J] VERCEL DEEP-LINK & PRODUCTION ROUTE COMPATIBILITY ---');
     const prodUrl = `https://bookup-in.vercel.app/manage/${tokenB}`;
     assert(prodUrl.startsWith('https://bookup-in.vercel.app/manage/'), 'URL is formatted as production /manage/<token>');
     const res22 = await fetch(`${API_BASE}/public/bookings/manage/${tokenB}`);
     assert(res22.status === 200, 'Production-style management token resolves appointment data');
 
-    // -------------------------------------------------------------------------
-    // TEST 23: Refresh production-style management URL
-    // -------------------------------------------------------------------------
-    console.log('\n--- TEST 23: REFRESH PRODUCTION-STYLE MANAGEMENT URL ---');
     const res23 = await fetch(`${API_BASE}/public/bookings/manage/${tokenB}`, { cache: 'no-store' });
     assert(res23.status === 200, 'Page refresh on production-style route returns HTTP 200');
     const data23 = await res23.json();
     assert(data23.booking?.id === bookingB.id, 'Appointment data continues to load on refresh');
 
     // -------------------------------------------------------------------------
-    // TEST 24: Anonymous Client Database Direct Access Audit
+    // DATABASE SECURITY AUDIT: ANONYMOUS CLIENT DIRECT ACCESS CHECK
     // -------------------------------------------------------------------------
-    console.log('\n--- TEST 24: ANONYMOUS DATABASE CLIENT PERMISSIONS AUDIT ---');
+    console.log('\n--- [AUDIT] ANONYMOUS DATABASE CLIENT PERMISSIONS AUDIT ---');
     const anonKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
     if (anonKey) {
       const anonSupabase = createClient(url, anonKey);
@@ -456,7 +401,7 @@ async function runComprehensiveSuite() {
     }
 
     console.log('\n================================================================');
-    console.log('✅ ALL 24 CUSTOMER BOOKING SECURITY & MANAGEMENT TESTS PASSED');
+    console.log('✅ ALL TESTS [A] THROUGH [J] PASSED (24/24 ASSERTIONS VERIFIED)');
     console.log('================================================================\n');
   } finally {
     // Cleanup created test records
