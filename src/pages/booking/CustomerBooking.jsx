@@ -26,7 +26,7 @@ import { whatsAppService } from '../../services/notifications/MockWhatsAppProvid
 import { MOCK_GCAL_BUSY_EVENTS } from '../../services/calendar/MockGoogleCalendarProvider';
 import { DEMO_PROVIDER, DEMO_POLICIES, DEMO_BOOKINGS, createSeedState } from '../../data/seedData';
 import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
-import { dbService } from '../../services/supabase/dbService';
+import { customerBookingService } from '../../services/booking/customerBookingService';
 import './BookingPage.css';
 
 export default function CustomerBooking() {
@@ -66,9 +66,9 @@ export default function CustomerBooking() {
   useEffect(() => {
     let isMounted = true;
 
-    if (lookupIdentifier && isSupabaseConfigured()) {
-      dbService
-        .getBookingByManagementToken(lookupIdentifier)
+    if (lookupIdentifier) {
+      customerBookingService
+        .getBooking(lookupIdentifier)
         .then(data => {
           if (isMounted) {
             if (data) {
@@ -78,7 +78,7 @@ export default function CustomerBooking() {
           }
         })
         .catch(err => {
-          console.error('Failed to load booking from Supabase:', err);
+          console.error('Failed to load booking from API/Supabase:', err);
           if (isMounted) setIsLoading(false);
         });
     }
@@ -93,7 +93,7 @@ export default function CustomerBooking() {
   }, [lookupIdentifier, demoBooking, hasBookings, dispatch]);
 
   const provider = supabaseBookingData?.provider || state.provider || DEMO_PROVIDER;
-  const policies = supabaseBookingData?.policies || state.policies || DEMO_POLICIES;
+  const policies = supabaseBookingData?.policies || supabaseBookingData?.cancellationPolicy || state.policies || DEMO_POLICIES;
   const availability = supabaseBookingData?.availability || state.availability;
   const services = useMemo(
     () => supabaseBookingData?.services || state.services || [],
@@ -197,76 +197,70 @@ export default function CustomerBooking() {
     }
 
     const [h, m] = newTime.split(':').map(Number);
-    const endMinutes = h * 60 + m + resolvedBooking.duration;
-    const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
+    const endMinutes = h * 60 + m + (resolvedBooking.duration || 60);
+    const calculatedEndTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
 
-    if (isSupabaseConfigured() && resolvedBooking.id && !resolvedBooking.id.startsWith('booking-')) {
-      try {
-        await dbService.rescheduleBooking(resolvedBooking.id, newDate, newTime, endTime);
-      } catch (err) {
-        console.error('Failed to reschedule in Supabase:', err);
-        addToast(err.message || 'Failed to reschedule appointment.', 'error');
-        return;
-      }
+    try {
+      const result = await customerBookingService.rescheduleBooking(lookupIdentifier, newDate, newTime);
+      const finalEndTime = result?.booking?.endTime || calculatedEndTime;
+
+      // Synchronize store and local state
+      dispatch({
+        type: ACTIONS.RESCHEDULE_BOOKING,
+        payload: {
+          id: resolvedBooking.id,
+          date: newDate,
+          startTime: newTime,
+          endTime: finalEndTime,
+        },
+      });
+
+      setSupabaseBookingData(prev => prev ? {
+        ...prev,
+        booking: {
+          ...prev.booking,
+          date: newDate,
+          startTime: newTime,
+          endTime: finalEndTime,
+        },
+      } : null);
+
+      setRescheduledSuccess(true);
+      addToast('Appointment rescheduled successfully.');
+      setShowRescheduleModal(false);
+    } catch (err) {
+      console.error('Failed to reschedule:', err);
+      addToast(err.message || 'Failed to reschedule appointment.', 'error');
     }
-
-    // Synchronize store and local state
-    dispatch({
-      type: ACTIONS.RESCHEDULE_BOOKING,
-      payload: {
-        id: resolvedBooking.id,
-        date: newDate,
-        startTime: newTime,
-        endTime,
-      },
-    });
-
-    setSupabaseBookingData(prev => prev ? {
-      ...prev,
-      booking: {
-        ...prev.booking,
-        date: newDate,
-        startTime: newTime,
-        endTime,
-      },
-    } : null);
-
-    setRescheduledSuccess(true);
-    addToast('Appointment rescheduled successfully.');
-    setShowRescheduleModal(false);
   };
 
   const handleConfirmCancel = async () => {
-    const newStatus = isWithinFreeCancellation ? 'cancelled' : 'late-cancellation';
+    try {
+      const result = await customerBookingService.cancelBooking(lookupIdentifier);
+      const actualNewStatus = result?.status || (isWithinFreeCancellation ? 'cancelled' : 'late-cancellation');
 
-    if (isSupabaseConfigured() && resolvedBooking.id && !resolvedBooking.id.startsWith('booking-')) {
-      try {
-        await dbService.updateBookingStatus(resolvedBooking.id, newStatus);
-      } catch (err) {
-        console.error('Failed to cancel in Supabase:', err);
-        addToast(err.message || 'Failed to cancel appointment.', 'error');
-        return;
+      if (actualNewStatus === 'cancelled') {
+        dispatch({ type: ACTIONS.CANCEL_BOOKING, payload: resolvedBooking.id });
+        addToast(result?.message || 'Appointment cancelled.');
+      } else {
+        dispatch({ type: ACTIONS.MARK_LATE_CANCELLATION, payload: resolvedBooking.id });
+        addToast(result?.message || 'Appointment cancelled (late cancellation).');
       }
+
+      setSupabaseBookingData(prev => prev ? {
+        ...prev,
+        booking: {
+          ...prev.booking,
+          status: actualNewStatus,
+        },
+      } : null);
+
+      setRescheduledSuccess(false);
+      setShowCancelModal(false);
+    } catch (err) {
+      console.error('Failed to cancel:', err);
+      addToast(err.message || 'Failed to cancel appointment.', 'error');
     }
-
-    if (isWithinFreeCancellation) {
-      dispatch({ type: ACTIONS.CANCEL_BOOKING, payload: resolvedBooking.id });
-      addToast('Appointment cancelled.');
-    } else {
-      dispatch({ type: ACTIONS.MARK_LATE_CANCELLATION, payload: resolvedBooking.id });
-      addToast('Appointment cancelled (late cancellation).');
-    }
-
-    setSupabaseBookingData(prev => prev ? {
-      ...prev,
-      booking: {
-        ...prev.booking,
-        status: newStatus,
-      },
-    } : null);
-
-    setRescheduledSuccess(false);
-    setShowCancelModal(false);
   };
 
   const handleAddToCalendar = () => {

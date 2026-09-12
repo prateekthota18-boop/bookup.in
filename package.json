@@ -10,8 +10,9 @@
     "start": "node server/index.js",
     "build": "vite build",
     "lint": "oxlint",
-    "test": "node tests/test-provider-save-and-oauth.js",
+    "test": "node tests/test-customer-booking-management.js",
     "test:persistence": "node tests/test-customer-booking-persistence.js",
+    "test:oauth": "node tests/test-provider-save-and-oauth.js",
     "preview": "vite preview"
   },
   "dependencies": {

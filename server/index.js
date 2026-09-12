@@ -8,6 +8,7 @@ import cors from 'cors';
 import { config } from './config.js';
 import authRoutes from './routes/auth.js';
 import calendarRoutes from './routes/calendar.js';
+import publicBookingsRoutes from './routes/publicBookings.js';
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/auth/google', authRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/public/bookings/manage', publicBookingsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -57,12 +59,14 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Start Server
-app.listen(config.port, '0.0.0.0', () => {
+const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`\n==================================================`);
   console.log(`🚀 BookUp Backend running on port ${config.port} (0.0.0.0)`);
   console.log(`📅 Google OAuth Configured: ${config.isGoogleConfigured() ? 'YES ✓' : 'NO (Add credentials to .env)'}`);
   console.log(`🔗 Redirect URI: ${config.googleRedirectUri}`);
   console.log(`==================================================\n`);
 });
+
+export default app;
+export { app, server };
 
