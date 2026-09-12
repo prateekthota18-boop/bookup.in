@@ -11,6 +11,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "test": "node tests/test-provider-save-and-oauth.js",
+    "test:persistence": "node tests/test-customer-booking-persistence.js",
     "preview": "vite preview"
   },
   "dependencies": {

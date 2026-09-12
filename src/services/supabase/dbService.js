@@ -4,6 +4,7 @@
  */
 
 import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { hashManagementToken } from '../../utils/token.js';
 
 const DAYS_LIST = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
@@ -475,29 +476,110 @@ export const dbService = {
   },
 
   /**
-   * Get single booking by ID (used by /booking/:id)
+   * Get single booking by ID (used by legacy /booking/:id)
    */
   async getBookingById(bookingId) {
-    if (!isSupabaseConfigured() || !bookingId) return null;
+    return this.getBookingByManagementToken(bookingId);
+  },
 
-    const { data, error } = await supabase
-      .from('bookings')
-      .select(`
-        *,
-        services (*),
-        providers (*)
-      `)
-      .eq('id', bookingId)
-      .maybeSingle();
+  /**
+   * Get single booking by persistent management token (or booking ID fallback)
+   * Loads booking details along with provider profile, services, availability, and policies
+   */
+  async getBookingByManagementToken(token) {
+    if (!isSupabaseConfigured() || !token) return null;
+    const trimmed = String(token).trim();
+    if (!trimmed) return null;
 
-    if (error || !data) return null;
+    let data = null;
+
+    // 1. Hash the token and search by notes containing [mgmt_hash:<hash>]
+    try {
+      const tokenHash = await hashManagementToken(trimmed);
+      if (tokenHash) {
+        const { data: noteMatch } = await supabase
+          .from('bookings')
+          .select(`
+            *,
+            services (*),
+            providers (*)
+          `)
+          .ilike('notes', `%[mgmt_hash:${tokenHash}]%`)
+          .maybeSingle();
+
+        if (noteMatch) {
+          data = noteMatch;
+        }
+
+        // Also check if management_token column exists and matches
+        if (!data) {
+          try {
+            const { data: colMatch } = await supabase
+              .from('bookings')
+              .select(`
+                *,
+                services (*),
+                providers (*)
+              `)
+              .eq('management_token', tokenHash)
+              .maybeSingle();
+            if (colMatch) data = colMatch;
+          } catch {
+            // Column may not exist yet
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Token hash lookup warning:', e);
+    }
+
+    // 2. Fallback: Lookup by ID if token looks like UUID or legacy ID
+    if (!data) {
+      const { data: idMatch } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          services (*),
+          providers (*)
+        `)
+        .eq('id', trimmed)
+        .maybeSingle();
+
+      if (idMatch) {
+        data = idMatch;
+      }
+    }
+
+    if (!data) return null;
+
+    const providerId = data.provider_id;
+    let policy = null;
+    let services = [];
+    let availability = null;
+
+    if (providerId) {
+      try {
+        const [polRes, svcRes, availRes] = await Promise.allSettled([
+          this.getPolicy(providerId),
+          this.getServices(providerId, true),
+          this.getAvailability(providerId),
+        ]);
+        if (polRes.status === 'fulfilled') policy = polRes.value;
+        if (svcRes.status === 'fulfilled') services = svcRes.value || [];
+        if (availRes.status === 'fulfilled') availability = availRes.value;
+      } catch (err) {
+        console.warn('Failed to hydrate provider metadata for booking:', err);
+      }
+    }
+
+    const cleanNotes = (data.notes || '').replace(/\[mgmt_hash:[^\]]+\]/g, '').trim();
 
     return {
       booking: {
         id: data.id,
         providerId: data.provider_id,
         serviceId: data.service_id,
-        serviceName: data.services?.name || 'Service',
+        serviceName: data.services?.name || data.service_name || 'Service',
         customerId: data.customer_id,
         customerName: data.customer_name,
         customerPhone: data.customer_phone,
@@ -512,8 +594,9 @@ export const dbService = {
         depositAmount: Number(data.deposit_amount) || 0,
         depositStatus: data.deposit_status || 'paid',
         status: data.status,
-        notes: data.notes || '',
+        notes: cleanNotes,
         createdAt: data.created_at,
+        managementToken: trimmed,
       },
       provider: data.providers ? {
         id: data.providers.id,
@@ -533,6 +616,9 @@ export const dbService = {
         price: Number(data.services.price),
         depositAmount: Number(data.services.deposit_amount),
       } : null,
+      policies: policy,
+      services,
+      availability,
     };
   },
 
@@ -549,10 +635,15 @@ export const dbService = {
     bookingDate,
     startTime,
     notes = '',
+    managementTokenHash = '',
   }) {
     if (!isSupabaseConfigured()) {
       throw new Error('Supabase is not configured.');
     }
+
+    const finalNotes = managementTokenHash
+      ? (notes ? `${notes}\n[mgmt_hash:${managementTokenHash}]` : `[mgmt_hash:${managementTokenHash}]`)
+      : notes;
 
     // Attempt RPC first (enforcing lock in PostgreSQL)
     const { data: rpcResult, error: rpcError } = await supabase.rpc('create_booking_atomic', {
@@ -564,12 +655,23 @@ export const dbService = {
       p_customer_whatsapp: customerWhatsApp || customerPhone,
       p_booking_date: bookingDate,
       p_start_time: startTime,
-      p_notes: notes,
+      p_notes: finalNotes,
     });
 
     if (!rpcError && rpcResult) {
       if (rpcResult.success === false) {
         throw new Error(rpcResult.error || 'Slot conflict: This time is already booked.');
+      }
+      const rpcBookingId = rpcResult.booking_id || rpcResult.bookingId;
+      if (rpcBookingId && managementTokenHash) {
+        try {
+          await supabase
+            .from('bookings')
+            .update({ management_token: managementTokenHash })
+            .eq('id', rpcBookingId);
+        } catch {
+          // Ignore if column doesn't exist
+        }
       }
       return rpcResult;
     }
@@ -645,13 +747,24 @@ export const dbService = {
         deposit_amount: svc.deposit_amount || 0,
         deposit_status: svc.deposit_amount > 0 ? 'paid' : 'na',
         status: 'confirmed',
-        notes,
+        notes: finalNotes,
       })
       .select()
       .single();
 
     if (insertErr) {
       throw new Error(insertErr.message);
+    }
+
+    if (newBooking?.id && managementTokenHash) {
+      try {
+        await supabase
+          .from('bookings')
+          .update({ management_token: managementTokenHash })
+          .eq('id', newBooking.id);
+      } catch {
+        // Safe to ignore if column is not yet present
+      }
     }
 
     return {

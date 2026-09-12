@@ -14,6 +14,7 @@ import { whatsAppService } from '../../services/notifications/MockWhatsAppProvid
 import { isDemoSlug, createSeedState } from '../../data/seedData';
 import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
 import { dbService } from '../../services/supabase/dbService';
+import { generateManagementToken, hashManagementToken, buildManagementUrl } from '../../utils/token';
 import './BookingPage.css';
 
 export default function PublicBookingPage() {
@@ -220,6 +221,16 @@ export default function PublicBookingPage() {
     const endMinutes = h * 60 + m + service.duration;
     const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
 
+    // Cryptographically secure management token for customer self-service
+    const managementToken = generateManagementToken();
+    let tokenHash = '';
+    try {
+      tokenHash = await hashManagementToken(managementToken);
+    } catch (e) {
+      console.warn('Failed to hash token:', e);
+    }
+    const managementUrl = buildManagementUrl(managementToken);
+
     let realBookingId = generateId('booking');
     let authoritativePrice = service.price;
     let authoritativeDeposit = service.depositAmount;
@@ -237,6 +248,7 @@ export default function PublicBookingPage() {
           bookingDate: selectedDate,
           startTime: selectedTime,
           notes: '',
+          managementTokenHash: tokenHash,
         });
 
         if (result?.bookingId) {
@@ -277,6 +289,8 @@ export default function PublicBookingPage() {
       status: 'confirmed',
       source: 'BookUp booking page',
       notes: '',
+      managementToken,
+      managementUrl,
       createdAt: new Date().toISOString(),
     };
 
@@ -291,6 +305,9 @@ export default function PublicBookingPage() {
     dispatch({ type: ACTIONS.ADD_BOOKING, payload: { booking, customer } });
     setConfirmedBooking(booking);
     setStep('confirmed');
+
+    // Immediately navigate to persistent management URL so refresh / cold reopen retains the booking
+    navigate(`/manage/${managementToken}?confirmed=true`, { replace: true });
 
     // Sync event to provider's Google Calendar if real provider
     if (!isDemo && provider?.id) {
@@ -678,7 +695,11 @@ export default function PublicBookingPage() {
                 <span>💬</span> WhatsApp Message Confirmation (Simulated)
               </div>
               <div className="confirmed-whatsapp-bubble">
-                {whatsAppService.generateConfirmationMessage(confirmedBooking, provider)}
+                {whatsAppService.generateConfirmationMessage(
+                  confirmedBooking,
+                  provider,
+                  confirmedBooking.managementUrl || (confirmedBooking.managementToken ? buildManagementUrl(confirmedBooking.managementToken) : '')
+                )}
                 <div className="confirmed-whatsapp-time">
                   {formatTime(confirmedBooking.startTime)} ✓✓
                 </div>
@@ -688,7 +709,11 @@ export default function PublicBookingPage() {
             <div className="confirmed-actions">
               <button
                 className="btn btn-primary btn-block"
-                onClick={() => navigate(`/booking/${confirmedBooking.id}`)}
+                onClick={() => navigate(
+                  confirmedBooking.managementToken
+                    ? `/manage/${confirmedBooking.managementToken}?confirmed=true`
+                    : `/booking/${confirmedBooking.id}`
+                )}
               >
                 ⚙️ Manage Appointment
               </button>

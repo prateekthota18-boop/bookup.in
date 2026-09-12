@@ -3,7 +3,7 @@
  * Simulates WhatsApp messaging with real-world Indian templates & formatting
  */
 
-import { NotificationProvider } from './NotificationProvider';
+import { NotificationProvider } from './NotificationProvider.js';
 
 export class MockWhatsAppProvider extends NotificationProvider {
   formatDateIndian(dateStr) {
@@ -28,7 +28,7 @@ export class MockWhatsAppProvider extends NotificationProvider {
     return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
   }
 
-  generateConfirmationMessage(booking, provider) {
+  generateConfirmationMessage(booking, provider, managementUrl) {
     const custName = booking.customerName || 'there';
     const svcName = booking.serviceName || 'Session';
     const provName = provider?.name || 'your provider';
@@ -36,10 +36,21 @@ export class MockWhatsAppProvider extends NotificationProvider {
     const startFormatted = this.formatTimeAmPm(booking.startTime);
     const endFormatted = this.formatTimeAmPm(booking.endTime);
     const depositNote = booking.depositAmount > 0
-      ? `\n💳 UPI Deposit Paid: ₹${booking.depositAmount}`
+      ? `\n💳 Deposit paid: ₹${booking.depositAmount}`
       : '';
 
-    return `Hi ${custName}! 👋\n\nYour ${svcName} with ${provName} is confirmed for ${dateFormatted}, ${startFormatted}–${endFormatted}.${depositNote}\n\n📍 Mode: In-person / Online\n⚠️ Reply CANCEL to cancel (free cancellation up to 12 hrs before).\n\nSee you soon!`;
+    const manageLink =
+      managementUrl ||
+      booking.managementUrl ||
+      (booking.managementToken
+        ? (typeof window !== 'undefined' ? `${window.location.origin}/manage/${booking.managementToken}` : `https://bookup-in.vercel.app/manage/${booking.managementToken}`)
+        : '');
+
+    const manageSection = manageLink
+      ? `\n\nManage your booking:\n${manageLink}\n\nYou can use this link to reschedule or cancel your appointment.`
+      : '\n\n📍 Mode: In-person / Online\n⚠️ Reply CANCEL to cancel (free cancellation up to 12 hrs before).';
+
+    return `Hi ${custName}! 👋\n\nYour ${svcName} with ${provName} is confirmed.\n\n📅 ${dateFormatted}\n⏰ ${startFormatted}–${endFormatted}${depositNote}${manageSection}\n\nSee you soon!`;
   }
 
   generateCancellationMessage(booking, provider) {

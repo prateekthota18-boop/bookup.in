@@ -87,6 +87,8 @@ function AppRoutes() {
 
       {/* Public booking page & Customer management */}
       <Route path="/book/:slug" element={<PublicBookingPage />} />
+      <Route path="/manage/:token" element={<CustomerBooking />} />
+      <Route path="/booking/:token" element={<CustomerBooking />} />
       <Route path="/booking/:id" element={<CustomerBooking />} />
 
       {/* Dashboard (protected) */}

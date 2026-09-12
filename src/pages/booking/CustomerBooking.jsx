@@ -1,10 +1,11 @@
 /**
- * BookUp — Customer Booking Management Page (/booking/:id)
- * Allows customers to view booking details, reschedule slots, and cancel with policy evaluation
+ * BookUp — Customer Booking Management Page (/manage/:token or /booking/:id)
+ * Persistent public customer-management route backed by Supabase.
+ * Allows customers to view confirmation, reschedule slots, and cancel with policy evaluation.
  */
 
 import { useState, useMemo, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   useStore,
   formatCurrency,
@@ -20,6 +21,8 @@ import {
   getInitials,
   getTimeSlotsDetailedForDate,
 } from '../../utils/helpers';
+import { buildManagementUrl } from '../../utils/token';
+import { whatsAppService } from '../../services/notifications/MockWhatsAppProvider';
 import { MOCK_GCAL_BUSY_EVENTS } from '../../services/calendar/MockGoogleCalendarProvider';
 import { DEMO_PROVIDER, DEMO_POLICIES, DEMO_BOOKINGS, createSeedState } from '../../data/seedData';
 import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
@@ -27,7 +30,11 @@ import { dbService } from '../../services/supabase/dbService';
 import './BookingPage.css';
 
 export default function CustomerBooking() {
-  const { id } = useParams();
+  const { token, id } = useParams();
+  const lookupIdentifier = token || id;
+  const [searchParams] = useSearchParams();
+  const isJustConfirmed = searchParams.get('confirmed') === 'true';
+
   const navigate = useNavigate();
   const { state, dispatch, addToast } = useStore();
 
@@ -39,34 +46,63 @@ export default function CustomerBooking() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // Resolve booking from state or demo fallback for cold direct links
+  // Resolve booking from state or demo fallback for immediate rendering
   const [supabaseBookingData, setSupabaseBookingData] = useState(null);
-  const bookingInState = state.bookings?.find(b => b.id === id);
-  const demoBooking = DEMO_BOOKINGS.find(b => b.id === id);
+  const bookingInState = state.bookings?.find(
+    b => b.managementToken === lookupIdentifier || b.id === lookupIdentifier
+  );
+  const demoBooking = DEMO_BOOKINGS.find(
+    b => b.managementToken === lookupIdentifier || b.id === lookupIdentifier
+  );
   const resolvedBooking = supabaseBookingData?.booking || bookingInState || demoBooking || null;
 
-  // Hydrate from Supabase or demo seed if direct link
+  const [isLoading, setIsLoading] = useState(
+    () => !bookingInState && !demoBooking && Boolean(lookupIdentifier) && isSupabaseConfigured()
+  );
+
+  const hasBookings = Boolean(state.bookings && state.bookings.length > 0);
+
+  // Authoritative Supabase hydration for persistent access across refresh, tabs, or incognito
   useEffect(() => {
     let isMounted = true;
-    if (!bookingInState && !demoBooking && id && isSupabaseConfigured()) {
-      dbService.getBookingById(id).then(data => {
-        if (isMounted && data) {
-          setSupabaseBookingData(data);
-        }
-      }).catch(err => console.error('Failed to load booking from Supabase:', err));
-    } else if (!state.bookings || state.bookings.length === 0) {
-      if (demoBooking) {
-        dispatch({ type: ACTIONS.LOAD_STATE, payload: createSeedState() });
-      }
+
+    if (lookupIdentifier && isSupabaseConfigured()) {
+      dbService
+        .getBookingByManagementToken(lookupIdentifier)
+        .then(data => {
+          if (isMounted) {
+            if (data) {
+              setSupabaseBookingData(data);
+            }
+            setIsLoading(false);
+          }
+        })
+        .catch(err => {
+          console.error('Failed to load booking from Supabase:', err);
+          if (isMounted) setIsLoading(false);
+        });
     }
-    return () => { isMounted = false; };
-  }, [id, state.bookings, demoBooking, bookingInState, dispatch]);
+
+    if (!hasBookings && demoBooking) {
+      dispatch({ type: ACTIONS.LOAD_STATE, payload: createSeedState() });
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [lookupIdentifier, demoBooking, hasBookings, dispatch]);
 
   const provider = supabaseBookingData?.provider || state.provider || DEMO_PROVIDER;
-  const policies = state.policies || DEMO_POLICIES;
-  const availability = state.availability;
+  const policies = supabaseBookingData?.policies || state.policies || DEMO_POLICIES;
+  const availability = supabaseBookingData?.availability || state.availability;
+  const services = useMemo(
+    () => supabaseBookingData?.services || state.services || [],
+    [supabaseBookingData?.services, state.services]
+  );
   const isGcal = Boolean(state.googleCalendar?.isConnected);
   const providerSlug = provider?.slug || 'alex-johnson';
+
+  const managementUrl = buildManagementUrl(resolvedBooking?.managementToken || lookupIdentifier);
 
   // Available slots for customer rescheduling (excluding current booking to avoid self-conflict)
   const availableSlotsDetailed = useMemo(() => {
@@ -82,13 +118,13 @@ export default function CustomerBooking() {
     return getTimeSlotsDetailedForDate(
       newDate,
       availability,
-      state.services || [],
+      services.length > 0 ? services : (state.services || []),
       resolvedBooking.serviceId,
       state.bookings || [],
       gcalEvents,
       resolvedBooking.id // Exclude self
     );
-  }, [resolvedBooking, newDate, availability, state.services, state.bookings, isGcal]);
+  }, [resolvedBooking, newDate, availability, services, state.services, state.bookings, isGcal]);
 
   // Max advance date
   const maxAdvanceDays = availability?.maxAdvanceBooking ?? 30;
@@ -111,6 +147,22 @@ export default function CustomerBooking() {
     }
   }, [resolvedBooking, cancellationWindow]);
 
+  // Loading state (avoids flashing "Appointment Not Found" during initial fetch)
+  if (isLoading) {
+    return (
+      <div className="booking-page">
+        <div className="booking-container">
+          <div style={{ textAlign: 'center', padding: 'var(--space-12) var(--space-6)' }}>
+            <div className="spinner" style={{ margin: '0 auto var(--space-4)' }} />
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+              Loading your appointment details...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // If booking not found
   if (!resolvedBooking) {
     return (
@@ -120,7 +172,7 @@ export default function CustomerBooking() {
             <div style={{ fontSize: '3rem', marginBottom: 'var(--space-3)' }}>📋</div>
             <h3 style={{ fontSize: 'var(--font-size-xl)', marginBottom: 'var(--space-2)' }}>Appointment Not Found</h3>
             <p style={{ color: 'var(--color-text-secondary)', maxWidth: 360, margin: '0 auto var(--space-6)' }}>
-              We couldn't find an appointment matching reference <strong>{id}</strong>.
+              We couldn't find an appointment matching reference <strong>{lookupIdentifier}</strong>.
             </p>
             <button className="btn btn-primary" onClick={() => navigate('/')}>Return to BookUp</button>
           </div>
@@ -158,6 +210,7 @@ export default function CustomerBooking() {
       }
     }
 
+    // Synchronize store and local state
     dispatch({
       type: ACTIONS.RESCHEDULE_BOOKING,
       payload: {
@@ -167,6 +220,16 @@ export default function CustomerBooking() {
         endTime,
       },
     });
+
+    setSupabaseBookingData(prev => prev ? {
+      ...prev,
+      booking: {
+        ...prev.booking,
+        date: newDate,
+        startTime: newTime,
+        endTime,
+      },
+    } : null);
 
     setRescheduledSuccess(true);
     addToast('Appointment rescheduled successfully.');
@@ -193,8 +256,30 @@ export default function CustomerBooking() {
       dispatch({ type: ACTIONS.MARK_LATE_CANCELLATION, payload: resolvedBooking.id });
       addToast('Appointment cancelled (late cancellation).');
     }
+
+    setSupabaseBookingData(prev => prev ? {
+      ...prev,
+      booking: {
+        ...prev.booking,
+        status: newStatus,
+      },
+    } : null);
+
     setRescheduledSuccess(false);
     setShowCancelModal(false);
+  };
+
+  const handleAddToCalendar = () => {
+    if (!resolvedBooking) return;
+    const title = encodeURIComponent(`${resolvedBooking.serviceName || 'Session'} with ${provider?.name || 'BookUp'}`);
+    const details = encodeURIComponent(
+      `Appointment with ${provider?.name}\nBooking reference: ${resolvedBooking.id}\nManage your booking: ${managementUrl}`
+    );
+    const cleanDate = (resolvedBooking.date || '').replace(/-/g, '');
+    const startClean = (resolvedBooking.startTime || '').replace(':', '') + '00';
+    const endClean = (resolvedBooking.endTime || '').replace(':', '') + '00';
+    const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${cleanDate}T${startClean}/${cleanDate}T${endClean}&details=${details}`;
+    window.open(gcalUrl, '_blank', 'noopener,noreferrer');
   };
 
   const isConfirmed = resolvedBooking.status === 'confirmed';
@@ -230,12 +315,28 @@ export default function CustomerBooking() {
           <div className="avatar avatar-lg" style={{ margin: '0 auto var(--space-3)' }}>
             {getInitials(provider?.name || 'U')}
           </div>
-          <h1 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, margin: '0 0 var(--space-1)', color: 'var(--color-text)' }}>
-            Manage your appointment
-          </h1>
-          <div style={{ fontSize: 'var(--font-size-base)', fontWeight: 600, color: 'var(--color-primary-700)' }}>
-            {provider?.name}
-          </div>
+
+          {isJustConfirmed ? (
+            <>
+              <div style={{ fontSize: '2.5rem', marginBottom: 'var(--space-2)' }}>🎉</div>
+              <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 700, margin: '0 0 var(--space-1)', color: 'var(--color-text)' }}>
+                You're booked!
+              </h1>
+              <div style={{ fontSize: 'var(--font-size-base)', fontWeight: 600, color: 'var(--color-primary-700)' }}>
+                Your appointment with {provider?.name} is confirmed.
+              </div>
+            </>
+          ) : (
+            <>
+              <h1 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, margin: '0 0 var(--space-1)', color: 'var(--color-text)' }}>
+                Manage your appointment
+              </h1>
+              <div style={{ fontSize: 'var(--font-size-base)', fontWeight: 600, color: 'var(--color-primary-700)' }}>
+                {provider?.name}
+              </div>
+            </>
+          )}
+
           {provider?.businessName && (
             <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginTop: 2 }}>
               {provider.businessName}
@@ -389,6 +490,21 @@ export default function CustomerBooking() {
             </div>
           </div>
 
+          {/* WhatsApp Confirmation Message Preview with Persistent URL */}
+          {isConfirmed && (
+            <div className="confirmed-whatsapp-preview" style={{ marginBottom: 'var(--space-5)' }}>
+              <div className="confirmed-whatsapp-label">
+                <span>💬</span> WhatsApp Message Confirmation (Simulated)
+              </div>
+              <div className="confirmed-whatsapp-bubble" style={{ whiteSpace: 'pre-wrap', fontSize: 'var(--font-size-xs)' }}>
+                {whatsAppService.generateConfirmationMessage(resolvedBooking, provider, managementUrl)}
+                <div className="confirmed-whatsapp-time">
+                  {formatTime(resolvedBooking.startTime)} ✓✓
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Cancellation Policy Box */}
           {policies && isConfirmed && (
             <div className="booking-policy" style={{ marginBottom: 'var(--space-6)' }}>
@@ -406,6 +522,14 @@ export default function CustomerBooking() {
               >
                 📅 Reschedule Appointment
               </button>
+
+              <button
+                className="btn btn-secondary btn-block"
+                onClick={handleAddToCalendar}
+              >
+                📅 Add to Calendar
+              </button>
+
               <button
                 className="btn btn-secondary btn-block"
                 style={{ color: 'var(--color-error-600)' }}
@@ -413,7 +537,9 @@ export default function CustomerBooking() {
               >
                 ✕ Cancel Appointment
               </button>
+
               <div style={{ borderTop: '1px solid var(--color-border)', margin: 'var(--space-2) 0' }} />
+
               <Link
                 to={`/book/${providerSlug}`}
                 className="btn btn-secondary btn-block"
