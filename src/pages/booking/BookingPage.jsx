@@ -91,29 +91,34 @@ export default function PublicBookingPage() {
   const calDays = useMemo(() => getCalendarDays(calYear, calMonth), [calYear, calMonth]);
   const todayStr = today.toISOString().split('T')[0];
 
-  // External calendar busy times (live Google Calendar when connected)
+  // External calendar busy times (live Google Calendar when provider has connected)
   const [liveGcalBusyTimes, setLiveGcalBusyTimes] = useState([]);
 
   useEffect(() => {
     let isMounted = true;
-    if (state.googleCalendar?.isConnected && selectedDate) {
-      const providerId = provider?.id || 'provider-1';
-      realGoogleCalendarService.getBusyTimes(selectedDate, providerId).then(times => {
+    if (isDemo) return;
+
+    if (selectedDate && provider?.id) {
+      realGoogleCalendarService.getBusyTimes(selectedDate, provider.id, provider.timezone || 'Asia/Kolkata').then(times => {
         if (isMounted && Array.isArray(times)) {
           setLiveGcalBusyTimes(times);
         }
+      }).catch(err => {
+        console.warn('Could not fetch calendar busy times (graceful fallback):', err.message);
       });
     }
     return () => { isMounted = false; };
-  }, [state.googleCalendar?.isConnected, selectedDate, provider?.id]);
+  }, [isDemo, selectedDate, provider?.id, provider?.timezone]);
 
   const calendarBusyTimes = useMemo(() => {
-    if (!state.googleCalendar?.isConnected || !selectedDate) return [];
-    if (liveGcalBusyTimes.length > 0) return liveGcalBusyTimes;
-    const d = new Date(selectedDate + 'T00:00:00');
-    const day = d.getDay();
-    return MOCK_GCAL_BUSY_EVENTS.filter(e => e.dayOfWeek === day);
-  }, [state.googleCalendar?.isConnected, selectedDate, liveGcalBusyTimes]);
+    if (isDemo) {
+      if (!state.googleCalendar?.isConnected || !selectedDate) return [];
+      const d = new Date(selectedDate + 'T00:00:00');
+      const day = d.getDay();
+      return MOCK_GCAL_BUSY_EVENTS.filter(e => e.dayOfWeek === day);
+    }
+    return liveGcalBusyTimes;
+  }, [isDemo, state.googleCalendar?.isConnected, selectedDate, liveGcalBusyTimes]);
 
   const timeSlotsDetailed = useMemo(() => {
     if (!selectedDate || !selectedService) return [];
@@ -287,10 +292,9 @@ export default function PublicBookingPage() {
     setConfirmedBooking(booking);
     setStep('confirmed');
 
-    // Sync event to provider's Google Calendar if connected
-    if (state.googleCalendar?.isConnected) {
-      const providerId = provider?.id || 'provider-1';
-      realGoogleCalendarService.createEvent(booking, providerId).then(gRes => {
+    // Sync event to provider's Google Calendar if real provider
+    if (!isDemo && provider?.id) {
+      realGoogleCalendarService.createEvent(booking, provider.id, provider.timezone || 'Asia/Kolkata').then(gRes => {
         if (gRes?.success && gRes.eventId) {
           dispatch({
             type: ACTIONS.UPDATE_BOOKING,
@@ -301,7 +305,19 @@ export default function PublicBookingPage() {
               syncedToGoogleCalendar: true,
             },
           });
+          setConfirmedBooking(prev => prev ? { ...prev, googleEventId: gRes.eventId, syncedToGoogleCalendar: true } : prev);
         }
+      }).catch(err => {
+        console.warn('Google Calendar sync failed (non-blocking):', err.message);
+      });
+    } else if (isDemo && state.googleCalendar?.isConnected) {
+      dispatch({
+        type: ACTIONS.UPDATE_BOOKING,
+        payload: {
+          id: booking.id,
+          googleEventId: 'demo-gcal-event',
+          syncedToGoogleCalendar: true,
+        },
       });
     }
   };

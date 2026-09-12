@@ -109,7 +109,10 @@ export function verifyOAuthState(stateToken) {
   hmac.update(payloadB64);
   const expectedSig = hmac.digest('base64url');
 
-  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expectedSig);
+
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
     return { valid: false, error: 'Invalid state signature (potential CSRF)' };
   }
 
@@ -124,7 +127,7 @@ export function verifyOAuthState(stateToken) {
     }
 
     return { valid: true, providerId: payload.providerId };
-  } catch (_err) {
-    return { valid: false, error: 'Failed to parse state payload' };
+  } catch (err) {
+    return { valid: false, error: `Failed to parse state payload: ${err.message}` };
   }
 }

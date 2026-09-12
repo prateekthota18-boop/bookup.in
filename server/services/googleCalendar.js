@@ -20,6 +20,23 @@ const SCOPES = [
   'openid',
 ].join(' ');
 
+function getTimezoneOffsetString(dateStr, timeZone = 'Asia/Kolkata') {
+  try {
+    const d = new Date(`${dateStr}T12:00:00Z`);
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'longOffset',
+    }).formatToParts(d);
+    const tzPart = parts.find(p => p.type === 'timeZoneName');
+    if (tzPart && tzPart.value) {
+      const match = tzPart.value.match(/GMT([+-]\d{2}:\d{2})/);
+      if (match) return match[1];
+      if (tzPart.value === 'GMT') return '+00:00';
+    }
+  } catch (_e) {}
+  return '+05:30';
+}
+
 export const googleCalendarService = {
   /**
    * Generate Google OAuth authorization URL
@@ -160,6 +177,8 @@ export const googleCalendarService = {
 
   /**
    * Fetch busy time intervals for a given date (YYYY-MM-DD)
+   * Clamped to [00:00, 23:59] in provider's timezone.
+   * Exposes only start and end times to preserve customer privacy.
    */
   async getBusyIntervals(providerId, dateStr, timeZone = 'Asia/Kolkata') {
     const accessToken = await this.getValidAccessToken(providerId);
@@ -167,9 +186,9 @@ export const googleCalendarService = {
       return { connected: false, busyTimes: [] };
     }
 
-    // Construct start of day and end of day in the specified timezone
-    const timeMin = `${dateStr}T00:00:00+05:30`;
-    const timeMax = `${dateStr}T23:59:59+05:30`;
+    const offset = getTimezoneOffsetString(dateStr, timeZone);
+    const timeMin = `${dateStr}T00:00:00${offset}`;
+    const timeMax = `${dateStr}T23:59:59${offset}`;
 
     try {
       const freeBusyRes = await fetch(`${CALENDAR_API_BASE}/freeBusy`, {
@@ -194,31 +213,40 @@ export const googleCalendarService = {
       const data = await freeBusyRes.json();
       const rawBusy = data?.calendars?.primary?.busy || [];
 
-      // Convert ISO UTC/offset strings to local HH:mm
-      const busyTimes = rawBusy.map(slot => {
+      // Format to HH:mm in provider's timezone and clamp to [00:00, 23:59]
+      const formatTime = (d) => {
+        const parts = new Intl.DateTimeFormat('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+          timeZone,
+        }).formatToParts(d);
+        const h = parts.find(p => p.type === 'hour')?.value || '00';
+        const m = parts.find(p => p.type === 'minute')?.value || '00';
+        return `${h}:${m}`;
+      };
+
+      const busyTimes = [];
+      for (const slot of rawBusy) {
         const startDate = new Date(slot.start);
         const endDate = new Date(slot.end);
 
-        // Format to HH:mm in Indian Standard Time (or target timezone)
-        const formatTime = (d) => {
-          const parts = new Intl.DateTimeFormat('en-IN', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-            timeZone,
-          }).formatToParts(d);
-          const h = parts.find(p => p.type === 'hour')?.value || '00';
-          const m = parts.find(p => p.type === 'minute')?.value || '00';
-          return `${h}:${m}`;
-        };
+        const startDay = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(startDate);
+        const endDay = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(endDate);
 
-        return {
-          title: 'Busy (Google Calendar)',
-          start: formatTime(startDate),
-          end: formatTime(endDate),
-          source: 'Google Calendar',
-        };
-      });
+        let startStr = formatTime(startDate);
+        let endStr = formatTime(endDate);
+
+        if (startDay < dateStr) startStr = '00:00';
+        if (endDay > dateStr) endStr = '23:59';
+
+        if (startDay <= dateStr && endDay >= dateStr) {
+          busyTimes.push({
+            start: startStr,
+            end: endStr,
+          });
+        }
+      }
 
       return { connected: true, busyTimes };
     } catch (err) {
@@ -236,8 +264,9 @@ export const googleCalendarService = {
       return { success: false, reason: 'not_connected' };
     }
 
-    const startDateTime = `${booking.date}T${booking.startTime}:00+05:30`;
-    const endDateTime = `${booking.date}T${booking.endTime}:00+05:30`;
+    const offset = getTimezoneOffsetString(booking.date, timeZone);
+    const startDateTime = `${booking.date}T${booking.startTime}:00${offset}`;
+    const endDateTime = `${booking.date}T${booking.endTime}:00${offset}`;
 
     const summary = `${booking.serviceName} — ${booking.customerName} (BookUp)`;
     const description = [

@@ -80,6 +80,7 @@ create table if not exists public.bookings (
   deposit_status text default 'paid',
   status text not null default 'confirmed', -- 'confirmed', 'completed', 'cancelled', 'no-show', 'late-cancellation'
   notes text,
+  google_event_id text,
   created_at timestamptz default now() not null,
   updated_at timestamptz default now() not null
 );

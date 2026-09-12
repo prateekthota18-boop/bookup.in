@@ -7,16 +7,18 @@ import { Router } from 'express';
 import { googleCalendarService } from '../services/googleCalendar.js';
 import { tokenStore } from '../services/tokenStore.js';
 import { config } from '../config.js';
+import { requireProviderAuth } from '../middleware/auth.js';
 
 const router = Router();
 
 /**
  * GET /api/auth/google/url
  * Returns authorization URL to initiate Google OAuth consent
+ * Authenticated provider only: resolves provider strictly from Supabase Auth session
  */
-router.get('/url', (req, res) => {
+router.get('/url', requireProviderAuth, (req, res) => {
   try {
-    const providerId = req.query.providerId || 'provider-1';
+    const providerId = req.providerId;
     const url = googleCalendarService.generateAuthUrl(providerId);
     res.json({ success: true, url });
   } catch (err) {
@@ -26,7 +28,7 @@ router.get('/url', (req, res) => {
 
 /**
  * GET /api/auth/google/callback
- * Handles Google OAuth redirect
+ * Handles Google OAuth redirect and HMAC-signed state verification
  */
 router.get('/callback', async (req, res) => {
   const { code, state, error } = req.query;
@@ -58,20 +60,22 @@ router.get('/callback', async (req, res) => {
 
 /**
  * GET /api/auth/google/status
- * Check if the given provider has an active Google Calendar integration
+ * Check if the authenticated provider has an active Google Calendar integration
+ * Authenticated provider only: resolves provider strictly from Supabase Auth session
  */
-router.get('/status', (req, res) => {
-  const providerId = req.query.providerId || 'provider-1';
+router.get('/status', requireProviderAuth, (req, res) => {
+  const providerId = req.providerId;
   const status = tokenStore.getStatus(providerId);
   res.json({ success: true, ...status });
 });
 
 /**
  * POST /api/auth/google/disconnect
- * Disconnect Google Calendar and revoke tokens
+ * Disconnect Google Calendar and revoke tokens for the authenticated provider
+ * Authenticated provider only: resolves provider strictly from Supabase Auth session
  */
-router.post('/disconnect', async (req, res) => {
-  const providerId = req.body.providerId || 'provider-1';
+router.post('/disconnect', requireProviderAuth, async (req, res) => {
+  const providerId = req.providerId;
   try {
     await googleCalendarService.disconnect(providerId);
     res.json({ success: true, message: 'Google Calendar disconnected' });

@@ -5,20 +5,40 @@
  */
 
 import { CalendarProvider } from './CalendarProvider';
+import { supabase } from '../supabase/supabaseClient';
+
+async function getAuthHeader() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return { Authorization: `Bearer ${session.access_token}` };
+    }
+  } catch (err) {
+    console.warn('Could not retrieve Supabase session token:', err);
+  }
+  return {};
+}
+
+const rawApiUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || '';
+const DEFAULT_API_BASE = rawApiUrl.trim()
+  ? `${rawApiUrl.trim().replace(/\/$/, '')}/api`
+  : '/api';
 
 export class RealGoogleCalendarProvider extends CalendarProvider {
-  constructor(apiBase = '/api') {
+  constructor(apiBase = DEFAULT_API_BASE) {
     super();
     this.apiBase = apiBase;
   }
 
   /**
-   * Get connection status for the provider
-   * @param {string} providerId
+   * Get connection status for the authenticated provider
    */
-  async getStatus(providerId = 'provider-1') {
+  async getStatus(_providerId) {
     try {
-      const res = await fetch(`${this.apiBase}/auth/google/status?providerId=${encodeURIComponent(providerId)}`);
+      const authHeaders = await getAuthHeader();
+      const res = await fetch(`${this.apiBase}/auth/google/status`, {
+        headers: { ...authHeaders },
+      });
       if (!res.ok) return { isConnected: false, email: null };
       const data = await res.json();
       return {
@@ -35,11 +55,12 @@ export class RealGoogleCalendarProvider extends CalendarProvider {
   /**
    * Initiate Google OAuth flow:
    * Fetches authorization URL from backend and redirects the user
-   * @param {Object} options { providerId: string }
    */
-  async connect(options = {}) {
-    const providerId = options.providerId || 'provider-1';
-    const res = await fetch(`${this.apiBase}/auth/google/url?providerId=${encodeURIComponent(providerId)}`);
+  async connect(_options = {}) {
+    const authHeaders = await getAuthHeader();
+    const res = await fetch(`${this.apiBase}/auth/google/url`, {
+      headers: { ...authHeaders },
+    });
     const data = await res.json();
 
     if (!data.success || !data.url) {
@@ -53,13 +74,12 @@ export class RealGoogleCalendarProvider extends CalendarProvider {
 
   /**
    * Disconnect Google Calendar and revoke tokens
-   * @param {string} providerId
    */
-  async disconnect(providerId = 'provider-1') {
+  async disconnect(_providerId) {
+    const authHeaders = await getAuthHeader();
     const res = await fetch(`${this.apiBase}/auth/google/disconnect`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ providerId }),
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
     });
 
     const data = await res.json();
@@ -76,15 +96,16 @@ export class RealGoogleCalendarProvider extends CalendarProvider {
 
   /**
    * Fetch busy time intervals for a given date (YYYY-MM-DD)
-   * Queries Google Calendar freebusy via backend
+   * Queries Google Calendar freebusy via backend for public booking slot filtering
    * @param {string} dateStr 'YYYY-MM-DD'
    * @param {string} providerId
+   * @param {string} timeZone
    */
-  async getBusyTimes(dateStr, providerId = 'provider-1') {
-    if (!dateStr) return [];
+  async getBusyTimes(dateStr, providerId, timeZone = 'Asia/Kolkata') {
+    if (!dateStr || !providerId) return [];
 
     try {
-      const res = await fetch(`${this.apiBase}/calendar/busy?providerId=${encodeURIComponent(providerId)}&date=${encodeURIComponent(dateStr)}`);
+      const res = await fetch(`${this.apiBase}/calendar/busy?providerId=${encodeURIComponent(providerId)}&date=${encodeURIComponent(dateStr)}&timeZone=${encodeURIComponent(timeZone)}`);
       if (!res.ok) return [];
       const data = await res.json();
       return Array.isArray(data.busyTimes) ? data.busyTimes : [];
@@ -98,13 +119,16 @@ export class RealGoogleCalendarProvider extends CalendarProvider {
    * Create an event for a confirmed booking
    * @param {Object} booking
    * @param {string} providerId
+   * @param {string} timeZone
    */
-  async createEvent(booking, providerId = 'provider-1') {
+  async createEvent(booking, providerId, timeZone = 'Asia/Kolkata') {
+    if (!providerId || !booking) return { success: false, reason: 'missing_params' };
+
     try {
       const res = await fetch(`${this.apiBase}/calendar/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providerId, booking }),
+        body: JSON.stringify({ providerId, booking, timeZone }),
       });
 
       const data = await res.json();
@@ -112,6 +136,7 @@ export class RealGoogleCalendarProvider extends CalendarProvider {
         success: Boolean(data.success),
         eventId: data.eventId || null,
         htmlLink: data.htmlLink || null,
+        duplicatePrevented: Boolean(data.duplicatePrevented),
       };
     } catch (err) {
       console.error('Failed to sync event to Google Calendar:', err.message);

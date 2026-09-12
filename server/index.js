@@ -11,12 +11,37 @@ import calendarRoutes from './routes/calendar.js';
 
 const app = express();
 
-// Middlewares
+// CORS configuration: safely allow configured frontend origins without wildcard
+const allowedOrigins = (config.frontendUrl || 'http://localhost:5173')
+  .split(',')
+  .map(url => url.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
 app.use(cors({
-  origin: config.frontendUrl,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g. server-to-server, curl, health probes)
+    if (!origin) return callback(null, true);
+
+    const normalizedOrigin = origin.replace(/\/$/, '');
+    if (
+      allowedOrigins.includes(normalizedOrigin) ||
+      (process.env.NODE_ENV !== 'production' && normalizedOrigin.startsWith('http://localhost:'))
+    ) {
+      return callback(null, true);
+    }
+    return callback(new Error(`Origin ${origin} not allowed by CORS`));
+  },
   credentials: true,
 }));
 app.use(express.json());
+
+// Minimal root health check endpoint (for Railway / load balancers)
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // API Routes
 app.use('/api/auth/google', authRoutes);
@@ -33,10 +58,11 @@ app.get('/api/health', (req, res) => {
 });
 
 // Start Server
-app.listen(config.port, () => {
+app.listen(config.port, '0.0.0.0', () => {
   console.log(`\n==================================================`);
-  console.log(`🚀 BookUp Backend running on http://localhost:${config.port}`);
+  console.log(`🚀 BookUp Backend running on port ${config.port} (0.0.0.0)`);
   console.log(`📅 Google OAuth Configured: ${config.isGoogleConfigured() ? 'YES ✓' : 'NO (Add credentials to .env)'}`);
   console.log(`🔗 Redirect URI: ${config.googleRedirectUri}`);
   console.log(`==================================================\n`);
 });
+
