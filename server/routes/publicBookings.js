@@ -374,16 +374,22 @@ async function handleCreateBooking(req, res) {
         googleEventId = gcalRes.eventId;
         meetLink = gcalRes.meetLink || null;
 
-        // Persist google_event_id and meet_link to database
-        const calUpdate = { google_event_id: googleEventId };
+        // Persist meet_link to database
         if (meetLink) {
-          calUpdate.meet_link = meetLink;
+          try {
+            await supabase.from('bookings').update({ meet_link: meetLink }).eq('id', newBooking.id);
+          } catch (_dbErr) {
+            console.warn('[PublicBookings] Failed to persist meet_link:', _dbErr.message);
+          }
         }
 
-        try {
-          await supabase.from('bookings').update(calUpdate).eq('id', newBooking.id);
-        } catch (_dbErr) {
-          // Non-fatal if column is pending
+        // Persist google_event_id if column exists
+        if (googleEventId) {
+          try {
+            await supabase.from('bookings').update({ google_event_id: googleEventId }).eq('id', newBooking.id);
+          } catch (_e) {
+            // Non-fatal if google_event_id column is pending migration
+          }
         }
       }
     } catch (gcalErr) {

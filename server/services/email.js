@@ -11,6 +11,7 @@
  * - Never logs or exposes GMAIL_APP_PASSWORD in plaintext.
  */
 
+import dns from 'dns';
 import nodemailer from 'nodemailer';
 import { config } from '../config.js';
 import { generateIcsCalendar } from '../utils/ics.js';
@@ -49,7 +50,9 @@ export class EmailService {
       host: 'smtp.gmail.com',
       port: 465,
       secure: true,
-      family: 4,
+      lookup: (hostname, options, callback) => {
+        dns.lookup(hostname, { family: 4 }, callback);
+      },
       connectionTimeout: 10000,
       greetingTimeout: 10000,
       socketTimeout: 15000,
