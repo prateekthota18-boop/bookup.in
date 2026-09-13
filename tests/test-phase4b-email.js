@@ -95,10 +95,10 @@ async function runPhase4bSuite() {
 
   // --- [TEST 2] EMAIL SERVICE PAYLOAD SHAPE & SAFE FAILURE ISOLATION ---
   console.log('\n--- [TEST 2] EMAIL SERVICE & SAFE FAILURE ISOLATION ---');
-  const configuredService = new EmailService({ user: 'test@example.com', pass: 'abcdefghijklmnop' });
+  const configuredService = new EmailService({ apiKey: 're_abcdef1234567890' });
   assert(configuredService.isConfigured() === true, 'Service reports configured when credentials provided');
 
-  const unconfiguredService = new EmailService({ user: '', pass: '' });
+  const unconfiguredService = new EmailService({ apiKey: '' });
   assert(unconfiguredService.isConfigured() === false, 'Service reports unconfigured when empty credentials provided');
 
   // Unconfigured service skips customer confirmation safely
@@ -144,16 +144,17 @@ async function runPhase4bSuite() {
   });
   assert(invalidEmailRes.success === false && invalidEmailRes.skipped === true, 'Invalid recipient email safely rejected');
 
-  // Dummy transporter failure isolation (never throws)
-  const mockFailingTransporter = {
-    sendMail: async () => {
-      throw new Error('SMTP connection refused: 535 Authentication credentials invalid');
+  // Dummy client failure isolation (never throws)
+  const mockFailingClient = {
+    emails: {
+      send: async () => {
+        return { data: null, error: { message: 'API key unauthorized' } };
+      },
     },
   };
   const failingService = new EmailService({
-    user: 'test@example.com',
-    pass: 'dummy_pass',
-    transporter: mockFailingTransporter,
+    apiKey: 're_dummy_key',
+    client: mockFailingClient,
   });
 
   const failureRes = await failingService.sendCustomerConfirmationEmail({
@@ -172,16 +173,17 @@ async function runPhase4bSuite() {
   // --- [TEST 3] ATTACHMENT VERIFICATION (CUSTOMER VS PROVIDER/REMINDER) ---
   console.log('\n--- [TEST 3] ATTACHMENT RULES (ICS ON CONFIRMATION ONLY) ---');
   let capturedCustomerMail = null;
-  const mockCustomerTransporter = {
-    sendMail: async (options) => {
-      capturedCustomerMail = options;
-      return { messageId: 'mock-cust-msg-id-123' };
+  const mockCustomerClient = {
+    emails: {
+      send: async (options) => {
+        capturedCustomerMail = options;
+        return { data: { id: 'mock-cust-msg-id-123' }, error: null };
+      },
     },
   };
   const mockCustService = new EmailService({
-    user: 'bookup@gmail.com',
-    pass: 'mock_pass',
-    transporter: mockCustomerTransporter,
+    apiKey: 're_mock_key',
+    client: mockCustomerClient,
   });
 
   await mockCustService.sendCustomerConfirmationEmail({
@@ -199,20 +201,22 @@ async function runPhase4bSuite() {
   assert(Array.isArray(capturedCustomerMail.attachments) && capturedCustomerMail.attachments.length === 1, 'Customer email has exactly 1 attachment');
   assert(capturedCustomerMail.attachments[0].filename === 'invite.ics', 'Attachment is named invite.ics');
   assert(capturedCustomerMail.attachments[0].contentType.includes('text/calendar'), 'Attachment contentType is text/calendar');
+  assert(Buffer.isBuffer(capturedCustomerMail.attachments[0].content), 'Attachment content is formatted as Buffer');
   assert(capturedCustomerMail.html.includes('https://meet.google.com/xyz-uvwx-rst'), 'Customer HTML embeds Google Meet link');
 
   // Provider email has NO attachments
   let capturedProviderMail = null;
-  const mockProviderTransporter = {
-    sendMail: async (options) => {
-      capturedProviderMail = options;
-      return { messageId: 'mock-prov-msg-id-456' };
+  const mockProviderClient = {
+    emails: {
+      send: async (options) => {
+        capturedProviderMail = options;
+        return { data: { id: 'mock-prov-msg-id-456' }, error: null };
+      },
     },
   };
   const mockProvService = new EmailService({
-    user: 'bookup@gmail.com',
-    pass: 'mock_pass',
-    transporter: mockProviderTransporter,
+    apiKey: 're_mock_key',
+    client: mockProviderClient,
   });
 
   await mockProvService.sendProviderNotificationEmail({
@@ -231,16 +235,17 @@ async function runPhase4bSuite() {
 
   // Reminder email has NO attachments
   let capturedReminderMail = null;
-  const mockReminderTransporter = {
-    sendMail: async (options) => {
-      capturedReminderMail = options;
-      return { messageId: 'mock-rem-msg-id-789' };
+  const mockReminderClient = {
+    emails: {
+      send: async (options) => {
+        capturedReminderMail = options;
+        return { data: { id: 'mock-rem-msg-id-789' }, error: null };
+      },
     },
   };
   const mockRemService = new EmailService({
-    user: 'bookup@gmail.com',
-    pass: 'mock_pass',
-    transporter: mockReminderTransporter,
+    apiKey: 're_mock_key',
+    client: mockReminderClient,
   });
 
   await mockRemService.sendReminderEmail({
@@ -419,13 +424,13 @@ async function runPhase4bSuite() {
   const waService = new RichAutomateService('dummy_key');
   assert(waService.isConfigured() === true, 'RichAutomate service class retains complete implementation');
 
-  // --- [TEST 11] SECURITY: GMAIL_APP_PASSWORD NEVER LEAKED ---
-  console.log('\n--- [TEST 11] SECURITY & PASSWORD LEAK PROTECTION ---');
+  // --- [TEST 11] SECURITY: RESEND_API_KEY NEVER LEAKED ---
+  console.log('\n--- [TEST 11] SECURITY & API KEY LEAK PROTECTION ---');
   const appStatusRes = await fetch(`${API_BASE}/health`);
   const appStatus = await appStatusRes.json();
   const statusStr = JSON.stringify(appStatus);
-  assert(!statusStr.includes('GMAIL_APP_PASSWORD'), 'GMAIL_APP_PASSWORD not present in status endpoint');
-  assert(!statusStr.includes(config.gmailAppPassword || 'THIS_SHOULD_NEVER_EXIST'), 'Actual Gmail password value not leaked in status');
+  assert(!statusStr.includes('RESEND_API_KEY'), 'RESEND_API_KEY not present in status endpoint');
+  assert(!statusStr.includes(config.resendApiKey || 'THIS_SHOULD_NEVER_EXIST'), 'Actual Resend API key value not leaked in status');
 
   // Cleanup test booking
   console.log('\nCleaning up test record...');

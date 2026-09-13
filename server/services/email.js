@@ -1,66 +1,50 @@
 /**
- * BookUp — Email Notification Service (Phase 4b)
- * Production Gmail SMTP transport via Nodemailer for:
+ * BookUp — Email Notification Service (Phase 4b / Resend Migration)
+ * Production HTTPS-based email delivery via Resend API (https://resend.com) for:
  * 1. Customer booking confirmations (with attached RFC 5545 .ics invite)
  * 2. Provider new-booking notifications
  * 3. 2-Hour customer upcoming appointment reminders
  *
  * Fault Isolation:
  * - Never throws unhandled exceptions that could roll back bookings.
- * - Safely skips if GMAIL_USER / GMAIL_APP_PASSWORD are not configured.
- * - Never logs or exposes GMAIL_APP_PASSWORD in plaintext.
+ * - Safely skips if RESEND_API_KEY is not configured.
+ * - Never logs or exposes API keys in plaintext.
  */
 
-import dns from 'dns';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { config } from '../config.js';
 import { generateIcsCalendar } from '../utils/ics.js';
 
 export class EmailService {
   constructor(options = {}) {
-    this._user = options.user !== undefined ? options.user : null;
-    this._pass = options.pass !== undefined ? options.pass : null;
-    this._transporter = options.transporter || null;
+    this._apiKey = options.apiKey !== undefined ? options.apiKey : null;
+    this._fromEmail = options.fromEmail !== undefined ? options.fromEmail : null;
+    this._client = options.client || null;
   }
 
-  get user() {
-    return this._user !== null ? this._user : (process.env.GMAIL_USER || config.gmailUser || '');
+  get apiKey() {
+    return this._apiKey !== null ? this._apiKey : (process.env.RESEND_API_KEY || config.resendApiKey || '');
   }
 
-  get pass() {
-    return this._pass !== null ? this._pass : (process.env.GMAIL_APP_PASSWORD || config.gmailAppPassword || '');
+  get fromEmail() {
+    return this._fromEmail !== null ? this._fromEmail : (process.env.RESEND_FROM_EMAIL || config.resendFromEmail || 'BookUp <onboarding@resend.dev>');
   }
 
   isConfigured() {
-    const u = this.user;
-    const p = this.pass;
-    return Boolean(u && u.trim().length > 0 && p && p.trim().length > 0);
+    const key = this.apiKey;
+    return Boolean(key && key.trim().length > 0);
   }
 
-  getTransporter() {
-    if (this._transporter) {
-      return this._transporter;
+  getClient() {
+    if (this._client) {
+      return this._client;
     }
 
     if (!this.isConfigured()) {
       return null;
     }
 
-    return nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      lookup: (hostname, options, callback) => {
-        dns.lookup(hostname, { family: 4 }, callback);
-      },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-      auth: {
-        user: this.user.trim(),
-        pass: this.pass.trim(),
-      },
-    });
+    return new Resend(this.apiKey.trim());
   }
 
   /**
@@ -84,12 +68,12 @@ export class EmailService {
     }
 
     if (!this.isConfigured()) {
-      console.warn('[EmailService] Gmail credentials not configured. Skipping customer confirmation email.');
-      return { success: false, skipped: true, error: 'Gmail SMTP credentials not configured' };
+      console.warn('[EmailService] Resend API key not configured. Skipping customer confirmation email.');
+      return { success: false, skipped: true, error: 'Resend API key not configured' };
     }
 
     try {
-      const transporter = this.getTransporter();
+      const client = this.getClient();
       const icsContent = generateIcsCalendar({
         serviceName,
         providerName,
@@ -186,24 +170,32 @@ ${managementUrl ? `- Manage Appointment: ${managementUrl}` : ''}
 A calendar invite (.ics) has been attached to this email.
       `.trim();
 
-      const info = await transporter.sendMail({
-        from: `"BookUp" <${this.user.trim()}>`,
-        to: to.trim(),
+      const { data, error } = await client.emails.send({
+        from: this.fromEmail,
+        to: [to.trim()],
         subject,
         text,
         html,
         attachments: [
           {
             filename: 'invite.ics',
-            content: icsContent,
+            content: Buffer.from(icsContent),
             contentType: 'text/calendar; charset=utf-8; method=REQUEST',
           },
         ],
       });
 
+      if (error) {
+        console.error('[EmailService] Resend customer confirmation failed:', error.message || error);
+        return {
+          success: false,
+          error: error.message || String(error),
+        };
+      }
+
       return {
         success: true,
-        messageId: info.messageId,
+        messageId: data?.id || null,
       };
     } catch (err) {
       console.error('[EmailService] Customer confirmation email failed:', err.message);
@@ -234,12 +226,12 @@ A calendar invite (.ics) has been attached to this email.
     }
 
     if (!this.isConfigured()) {
-      console.warn('[EmailService] Gmail credentials not configured. Skipping provider notification email.');
-      return { success: false, skipped: true, error: 'Gmail SMTP credentials not configured' };
+      console.warn('[EmailService] Resend API key not configured. Skipping provider notification email.');
+      return { success: false, skipped: true, error: 'Resend API key not configured' };
     }
 
     try {
-      const transporter = this.getTransporter();
+      const client = this.getClient();
       const subject = `New Booking: ${customerName} — ${serviceName} (${bookingDate} at ${startTime})`;
 
       const meetSection = meetLink
@@ -313,17 +305,25 @@ Time: ${startTime} (${duration} mins)
 ${meetLink ? `Google Meet Link: ${meetLink}` : ''}
       `.trim();
 
-      const info = await transporter.sendMail({
-        from: `"BookUp" <${this.user.trim()}>`,
-        to: to.trim(),
+      const { data, error } = await client.emails.send({
+        from: this.fromEmail,
+        to: [to.trim()],
         subject,
         text,
         html,
       });
 
+      if (error) {
+        console.error('[EmailService] Resend provider notification failed:', error.message || error);
+        return {
+          success: false,
+          error: error.message || String(error),
+        };
+      }
+
       return {
         success: true,
-        messageId: info.messageId,
+        messageId: data?.id || null,
       };
     } catch (err) {
       console.error('[EmailService] Provider notification email failed:', err.message);
@@ -353,12 +353,12 @@ ${meetLink ? `Google Meet Link: ${meetLink}` : ''}
     }
 
     if (!this.isConfigured()) {
-      console.warn('[EmailService] Gmail credentials not configured. Skipping reminder email.');
-      return { success: false, skipped: true, error: 'Gmail SMTP credentials not configured' };
+      console.warn('[EmailService] Resend API key not configured. Skipping reminder email.');
+      return { success: false, skipped: true, error: 'Resend API key not configured' };
     }
 
     try {
-      const transporter = this.getTransporter();
+      const client = this.getClient();
       const subject = `Reminder: ${serviceName} with ${providerName} starts soon`;
 
       const meetButton = meetLink
@@ -437,17 +437,25 @@ ${meetLink ? `- Google Meet Link: ${meetLink}` : ''}
 ${managementUrl ? `- Manage Appointment: ${managementUrl}` : ''}
       `.trim();
 
-      const info = await transporter.sendMail({
-        from: `"BookUp" <${this.user.trim()}>`,
-        to: to.trim(),
+      const { data, error } = await client.emails.send({
+        from: this.fromEmail,
+        to: [to.trim()],
         subject,
         text,
         html,
       });
 
+      if (error) {
+        console.error('[EmailService] Resend reminder email failed:', error.message || error);
+        return {
+          success: false,
+          error: error.message || String(error),
+        };
+      }
+
       return {
         success: true,
-        messageId: info.messageId,
+        messageId: data?.id || null,
       };
     } catch (err) {
       console.error('[EmailService] Reminder email failed:', err.message);

@@ -26,8 +26,8 @@ export const config = {
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '',
   richAutomateApiKey: process.env.RICH_AUTOMATE_API_KEY || '',
   internalCronSecret: process.env.INTERNAL_CRON_SECRET || '',
-  gmailUser: process.env.GMAIL_USER || '',
-  gmailAppPassword: process.env.GMAIL_APP_PASSWORD || '',
+  resendApiKey: process.env.RESEND_API_KEY || '',
+  resendFromEmail: process.env.RESEND_FROM_EMAIL || 'BookUp <onboarding@resend.dev>',
   isGoogleConfigured() {
     return Boolean(this.googleClientId && this.googleClientSecret && this.googleRedirectUri);
   },
@@ -35,6 +35,6 @@ export const config = {
     return Boolean(this.richAutomateApiKey && this.richAutomateApiKey.trim().length > 0);
   },
   isEmailConfigured() {
-    return Boolean(this.gmailUser && this.gmailUser.trim().length > 0 && this.gmailAppPassword && this.gmailAppPassword.trim().length > 0);
+    return Boolean(this.resendApiKey && this.resendApiKey.trim().length > 0);
   }
 };
