@@ -1,23 +1,31 @@
 /**
- * BookUp — Public Customer Booking Management API
+ * BookUp — Public Customer Booking Management & Booking Creation API (Phase 4)
  *
- * Secure bearer-token management route for customers:
- * - GET  /api/public/bookings/manage/:token
- * - POST /api/public/bookings/manage/:token/reschedule
- * - POST /api/public/bookings/manage/:token/cancel
+ * Public Customer Endpoints:
+ * - POST /api/public/bookings                         (Create booking + synchronous WhatsApp notifications)
+ * - POST /api/public/bookings/create                  (Alias for booking creation)
+ * - GET  /api/public/bookings/manage/:token           (Retrieve appointment by secure token)
+ * - POST /api/public/bookings/manage/:token/reschedule (Reschedule appointment + reset reminder)
+ * - POST /api/public/bookings/manage/:token/cancel    (Cancel appointment)
  *
  * Security:
  * - Authorizes access exclusively via cryptographically secure management token hash.
  * - Does not require customer authentication or login.
  * - Never exposes auth IDs, provider user_ids, database keys, or calendar credentials.
  * - Never logs raw management tokens.
+ * - Dual persistence support: stores management_token_hash / management_token_encrypted
+ *   in dedicated columns when available, with notes fallback for pre-migration safety.
+ * - WhatsApp failures are safely caught and NEVER alter or roll back the booking.
  */
 
 import { Router } from 'express';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
+import { encryptToken, decryptToken } from '../utils/crypto.js';
 import { googleCalendarService } from '../services/googleCalendar.js';
+import { richAutomateService } from '../services/richAutomate.js';
+import { emailService } from '../services/email.js';
 
 const router = Router();
 
@@ -35,7 +43,7 @@ function getSupabaseClient() {
 /**
  * SHA-256 hash helper for management token
  */
-function hashToken(token) {
+export function hashToken(token) {
   if (!token || typeof token !== 'string') return '';
   return crypto.createHash('sha256').update(token.trim()).digest('hex');
 }
@@ -79,6 +87,411 @@ async function findBookingByToken(supabase, token) {
 
   return data;
 }
+
+/**
+ * POST /api/public/bookings (or /api/public/bookings/create)
+ * Authoritative booking creation with conflict detection and synchronous WhatsApp notifications.
+ */
+async function handleCreateBooking(req, res) {
+  const {
+    providerId,
+    serviceId,
+    customerName,
+    customerEmail,
+    customerPhone,
+    customerWhatsApp,
+    bookingDate,
+    startTime,
+    notes = '',
+    managementToken: providedToken,
+  } = req.body;
+
+  if (!providerId || !serviceId || !customerName || !customerPhone || !bookingDate || !startTime) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing required booking fields (providerId, serviceId, customerName, customerPhone, bookingDate, startTime)',
+    });
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(bookingDate) || !/^\d{2}:\d{2}$/.test(startTime)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid date (YYYY-MM-DD) or time (HH:mm) format',
+    });
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return res.status(503).json({ success: false, error: 'Database service is unavailable' });
+  }
+
+  try {
+    // 1. Fetch Authoritative Service Details
+    const { data: service, error: svcErr } = await supabase
+      .from('services')
+      .select('*')
+      .eq('id', serviceId)
+      .eq('provider_id', providerId)
+      .eq('active', true)
+      .single();
+
+    if (svcErr || !service) {
+      return res.status(400).json({ success: false, error: 'Invalid or inactive service' });
+    }
+
+    // 2. Fetch Authoritative Provider Details
+    const { data: provider, error: provErr } = await supabase
+      .from('providers')
+      .select('*')
+      .eq('id', providerId)
+      .single();
+
+    if (provErr || !provider) {
+      return res.status(400).json({ success: false, error: 'Provider not found' });
+    }
+
+    const duration = Number(service.duration) || 60;
+    const buffer = provider.buffer_time ?? 15;
+
+    const [h, m] = startTime.split(':').map(Number);
+    const startMin = h * 60 + m;
+    const endMin = startMin + duration;
+    const endTime = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
+
+    const candStart = startMin;
+    const candEnd = endMin + buffer;
+
+    // 3. Authoritative Overlap Conflict Check
+    const { data: existingBookings, error: ebErr } = await supabase
+      .from('bookings')
+      .select('id, start_time, end_time, actual_end_time, status')
+      .eq('provider_id', providerId)
+      .eq('booking_date', bookingDate)
+      .in('status', ['confirmed', 'completed']);
+
+    if (ebErr) throw ebErr;
+
+    const conflict = existingBookings?.some(eb => {
+      const ebStart = eb.start_time ? Number(eb.start_time.split(':')[0]) * 60 + Number(eb.start_time.split(':')[1]) : 0;
+      const ebEndRaw = eb.actual_end_time || eb.end_time;
+      const ebEnd = ebEndRaw ? Number(ebEndRaw.split(':')[0]) * 60 + Number(ebEndRaw.split(':')[1]) : ebStart + 60;
+      const ebEndWithBuf = ebEnd + buffer;
+      return candStart < ebEndWithBuf && candEnd > ebStart;
+    });
+
+    if (conflict) {
+      return res.status(409).json({
+        success: false,
+        error: 'This slot is no longer available. Please select another time.',
+      });
+    }
+
+    // 4. Google Calendar busy intervals conflict check
+    try {
+      const tz = provider.timezone || 'Asia/Kolkata';
+      const gcalBusy = await googleCalendarService.getBusyIntervals(providerId, bookingDate, tz);
+      if (gcalBusy?.connected && Array.isArray(gcalBusy.busyTimes) && gcalBusy.busyTimes.length > 0) {
+        const conflictsWithGcal = gcalBusy.busyTimes.some(b => {
+          const bStart = Number(b.start.split(':')[0]) * 60 + Number(b.start.split(':')[1]);
+          const bEnd = Number(b.end.split(':')[0]) * 60 + Number(b.end.split(':')[1]);
+          return startMin < bEnd && endMin > bStart;
+        });
+
+        if (conflictsWithGcal) {
+          return res.status(409).json({
+            success: false,
+            error: 'Selected time slot conflicts with provider calendar.',
+          });
+        }
+      }
+    } catch (_gcalErr) {
+      // Non-blocking fallback if calendar provider service is unreachable
+    }
+
+    // 5. Generate or use management token
+    const rawToken = (providedToken && typeof providedToken === 'string' && providedToken.trim().length >= 16)
+      ? providedToken.trim()
+      : crypto.randomBytes(24).toString('hex');
+    const tokenHash = hashToken(rawToken);
+    const tokenEncrypted = encryptToken(rawToken);
+
+    // 6. Upsert Customer Record
+    let customerId = null;
+    const { data: existingCustomer } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('phone', customerPhone.trim())
+      .maybeSingle();
+
+    if (existingCustomer?.id) {
+      customerId = existingCustomer.id;
+      try {
+        await supabase
+          .from('customers')
+          .update({
+            name: customerName.trim(),
+            email: customerEmail?.trim() || '',
+            whatsapp: (customerWhatsApp || customerPhone).trim(),
+          })
+          .eq('id', customerId);
+      } catch (_e) {}
+    } else {
+      const { data: newCustomer, error: custErr } = await supabase
+        .from('customers')
+        .insert({
+          name: customerName.trim(),
+          email: customerEmail?.trim() || '',
+          phone: customerPhone.trim(),
+          whatsapp: (customerWhatsApp || customerPhone).trim(),
+        })
+        .select('id')
+        .single();
+      if (!custErr && newCustomer) {
+        customerId = newCustomer.id;
+      }
+    }
+
+    // 7. Assemble insert payload with dual persistence (columns + notes fallback)
+    const baseNotes = notes ? notes.trim() : '';
+    const encodedNotes = `${baseNotes}\n[mgmt_hash:${tokenHash}]\n[mgmt_enc:${tokenEncrypted}]`.trim();
+
+    const insertPayload = {
+      provider_id: providerId,
+      service_id: service.id,
+      customer_id: customerId,
+      customer_name: customerName.trim(),
+      customer_email: customerEmail?.trim() || '',
+      customer_phone: customerPhone.trim(),
+      customer_whatsapp: (customerWhatsApp || customerPhone).trim(),
+      booking_date: bookingDate,
+      start_time: startTime,
+      end_time: endTime,
+      duration,
+      price: Number(service.price) || 0,
+      deposit_amount: Number(service.deposit_amount) || 0,
+      deposit_status: (Number(service.deposit_amount) || 0) > 0 ? 'paid' : 'na',
+      status: 'confirmed',
+      notes: encodedNotes,
+    };
+
+    // Attempt insert with migration columns first
+    let newBooking = null;
+    let insertErr = null;
+
+    try {
+      const fullPayload = {
+        ...insertPayload,
+        management_token_hash: tokenHash,
+        management_token_encrypted: tokenEncrypted,
+      };
+      const res = await supabase.from('bookings').insert(fullPayload).select().single();
+      newBooking = res.data;
+      insertErr = res.error;
+    } catch (err) {
+      insertErr = err;
+    }
+
+    // If column doesn't exist yet (pre-migration), fall back to insert without columns
+    if (insertErr || !newBooking) {
+      const fallbackRes = await supabase.from('bookings').insert(insertPayload).select().single();
+      if (fallbackRes.error || !fallbackRes.data) {
+        throw new Error(fallbackRes.error?.message || insertErr?.message || 'Failed to insert booking');
+      }
+      newBooking = fallbackRes.data;
+    }
+
+    // 7b. SYNCHRONOUS GOOGLE MEET LINK & CALENDAR EVENT GENERATION
+    // Synchronously generate calendar event + Google Meet link before confirmation emails are sent.
+    let meetLink = null;
+    let googleEventId = null;
+
+    try {
+      const gcalBooking = {
+        id: newBooking.id,
+        date: bookingDate,
+        startTime,
+        endTime,
+        duration,
+        serviceName: service.name,
+        customerName: insertPayload.customer_name,
+        customerEmail: insertPayload.customer_email,
+        customerPhone: insertPayload.customer_phone,
+        price: insertPayload.price,
+        depositStatus: insertPayload.deposit_status,
+        notes,
+      };
+
+      const gcalRes = await googleCalendarService.createEvent(
+        providerId,
+        gcalBooking,
+        provider.timezone || 'Asia/Kolkata'
+      );
+
+      if (gcalRes?.success && gcalRes.eventId) {
+        googleEventId = gcalRes.eventId;
+        meetLink = gcalRes.meetLink || null;
+
+        // Persist google_event_id and meet_link to database
+        const calUpdate = { google_event_id: googleEventId };
+        if (meetLink) {
+          calUpdate.meet_link = meetLink;
+        }
+
+        try {
+          await supabase.from('bookings').update(calUpdate).eq('id', newBooking.id);
+        } catch (_dbErr) {
+          // Non-fatal if column is pending
+        }
+      }
+    } catch (gcalErr) {
+      // Non-blocking: Meet link generation failure must NEVER cancel, block, or roll back a booking
+      console.warn('[PublicBookings] Google Calendar/Meet link generation non-blocking error:', gcalErr.message);
+    }
+
+    // 8. SYNCHRONOUS SERVER-SIDE EMAIL NOTIFICATIONS (PRIMARY CHANNEL - Phase 4b)
+    const frontendBase = (config.frontendUrl || 'https://bookup-in.vercel.app').replace(/\/$/, '');
+    const managementUrl = `${frontendBase}/manage/${encodeURIComponent(rawToken)}`;
+
+    let customerEmailMsgId = null;
+    let customerEmailError = null;
+    let providerEmailMsgId = null;
+    let providerEmailError = null;
+
+    try {
+      const [customerEmailSend, providerEmailSend] = await Promise.allSettled([
+        insertPayload.customer_email
+          ? emailService.sendCustomerConfirmationEmail({
+              to: insertPayload.customer_email,
+              customerName: insertPayload.customer_name,
+              serviceName: service.name,
+              providerName: provider.name || provider.business_name || 'Coach',
+              bookingDate,
+              startTime,
+              duration,
+              meetLink,
+              managementUrl,
+              bookingId: newBooking.id,
+              timeZone: provider.timezone || 'Asia/Kolkata',
+            })
+          : Promise.resolve({ success: false, skipped: true, error: 'Customer email not provided' }),
+        provider.email
+          ? emailService.sendProviderNotificationEmail({
+              to: provider.email,
+              providerName: provider.name || provider.business_name || 'Coach',
+              customerName: insertPayload.customer_name,
+              customerEmail: insertPayload.customer_email,
+              customerPhone: insertPayload.customer_phone,
+              serviceName: service.name,
+              bookingDate,
+              startTime,
+              duration,
+              meetLink,
+            })
+          : Promise.resolve({ success: false, skipped: true, error: 'Provider email not configured' }),
+      ]);
+
+      if (customerEmailSend.status === 'fulfilled' && customerEmailSend.value?.success) {
+        customerEmailMsgId = customerEmailSend.value.messageId || null;
+      } else if (customerEmailSend.status === 'fulfilled') {
+        customerEmailError = customerEmailSend.value?.error || null;
+      } else {
+        customerEmailError = customerEmailSend.reason?.message || 'Customer confirmation email dispatch failed';
+      }
+
+      if (providerEmailSend.status === 'fulfilled' && providerEmailSend.value?.success) {
+        providerEmailMsgId = providerEmailSend.value.messageId || null;
+      } else if (providerEmailSend.status === 'fulfilled' && !providerEmailSend.value?.skipped) {
+        providerEmailError = providerEmailSend.value?.error || null;
+      }
+
+      // Record email dispatch results in Supabase
+      const emailUpdateData = {};
+      if (customerEmailMsgId) {
+        emailUpdateData.customer_confirmation_email_sent_at = new Date().toISOString();
+        emailUpdateData.customer_confirmation_email_msg_id = customerEmailMsgId;
+      } else if (customerEmailError) {
+        emailUpdateData.customer_confirmation_email_error = customerEmailError;
+      }
+
+      if (providerEmailMsgId) {
+        emailUpdateData.provider_notification_email_sent_at = new Date().toISOString();
+        emailUpdateData.provider_notification_email_msg_id = providerEmailMsgId;
+      } else if (providerEmailError) {
+        emailUpdateData.provider_notification_email_error = providerEmailError;
+      }
+
+      if (Object.keys(emailUpdateData).length > 0) {
+        try {
+          await supabase.from('bookings').update(emailUpdateData).eq('id', newBooking.id);
+        } catch (_e) {}
+      }
+    } catch (emailDispatchErr) {
+      // Non-blocking: an email send failure must NEVER cancel, block, or roll back a booking
+      console.warn('[PublicBookings] Email notification dispatch non-blocking error:', emailDispatchErr.message);
+    }
+
+    // 8b. WHATSAPP NOTIFICATIONS (RichAutomate - Phase 4)
+    // Preserved and callable; deferred as primary channel until dedicated sender number is available.
+    // To re-enable WhatsApp as secondary or parallel channel, uncomment the dispatch below:
+    /*
+    try {
+      await Promise.allSettled([
+        richAutomateService.sendCustomerConfirmation({
+          phone: insertPayload.customer_whatsapp,
+          customerName: insertPayload.customer_name,
+          serviceName: service.name,
+          providerName: provider.name || provider.business_name || 'Provider',
+          bookingDate,
+          startTime,
+          duration,
+          managementUrl,
+        }),
+        (provider.phone || provider.whatsapp)
+          ? richAutomateService.sendProviderNotification({
+              phone: provider.whatsapp || provider.phone,
+              customerName: insertPayload.customer_name,
+              serviceName: service.name,
+              bookingDate,
+              startTime,
+              duration,
+            })
+          : Promise.resolve({ success: false, skipped: true }),
+      ]);
+    } catch (_waErr) {}
+    */
+
+    return res.status(201).json({
+      success: true,
+      bookingId: newBooking.id,
+      endTime,
+      price: service.price,
+      depositAmount: service.deposit_amount || 0,
+      managementToken: rawToken,
+      managementUrl,
+      meetLink: meetLink || null,
+      email: {
+        customerSent: Boolean(customerEmailMsgId),
+        customerMessageId: customerEmailMsgId,
+        customerError: customerEmailError,
+        providerSent: Boolean(providerEmailMsgId),
+        providerMessageId: providerEmailMsgId,
+        providerError: providerEmailError,
+      },
+      whatsapp: {
+        customerSent: false,
+        skipped: true,
+        channel: 'email_primary',
+      },
+    });
+  } catch (err) {
+    console.error('Error in handleCreateBooking:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Internal booking creation error' });
+  }
+}
+
+// Register creation routes
+router.post('/', handleCreateBooking);
+router.post('/create', handleCreateBooking);
 
 /**
  * GET /api/public/bookings/manage/:token
@@ -135,7 +548,10 @@ router.get('/:token', async (req, res) => {
       });
     }
 
-    const cleanNotes = (bookingRow.notes || '').replace(/\[mgmt_hash:[^\]]+\]/g, '').trim();
+    const cleanNotes = (bookingRow.notes || '')
+      .replace(/\[mgmt_hash:[^\]]+\]/g, '')
+      .replace(/\[mgmt_enc:[^\]]+\]/g, '')
+      .trim();
     const managementUrl = `${(config.frontendUrl || 'https://bookup-in.vercel.app').replace(/\/$/, '')}/manage/${encodeURIComponent(token)}`;
 
     // Return sanitized customer-facing projection (no internal keys or user IDs)
@@ -157,6 +573,7 @@ router.get('/:token', async (req, res) => {
         status: bookingRow.status,
         notes: cleanNotes,
         managementUrl,
+        meetLink: bookingRow.meet_link || null,
         mode: 'In-person / Online',
       },
       provider: {
@@ -205,6 +622,7 @@ router.get('/:token', async (req, res) => {
 /**
  * POST /api/public/bookings/manage/:token/reschedule
  * Reschedules appointment after authoritative server-side slot and conflict verification.
+ * Automatically resets reminder state so the 2-hour reminder will fire relative to NEW time.
  */
 router.post('/:token/reschedule', async (req, res) => {
   const { token } = req.params;
@@ -292,18 +710,40 @@ router.post('/:token/reschedule', async (req, res) => {
       // Non-blocking fallback if calendar provider service is unreachable
     }
 
-    // 3. Persist update in Supabase (preserving exact same management token / hash)
-    const { error: updateErr } = await supabase
+    // 3. Persist update in Supabase (resetting reminder tracking fields)
+    const updatePayload = {
+      booking_date: newDate,
+      start_time: newTime,
+      end_time: newEndTime,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Attempt to reset reminder tracking columns if they exist
+    const fullUpdatePayload = {
+      ...updatePayload,
+      reminder_sent_at: null,
+      reminder_msg_id: null,
+      reminder_error: null,
+    };
+
+    const { error: fullUpdateErr } = await supabase
       .from('bookings')
-      .update({
-        booking_date: newDate,
-        start_time: newTime,
-        end_time: newEndTime,
-        updated_at: new Date().toISOString(),
-      })
+      .update(fullUpdatePayload)
       .eq('id', booking.id);
 
-    if (updateErr) throw updateErr;
+    if (fullUpdateErr) {
+      // Fallback if columns pending migration: update base fields and reset reminder tag in notes
+      const cleanedNotes = (booking.notes || '').replace(/\[rem_sent:[^\]]+\]/g, '').trim();
+      const { error: baseUpdateErr } = await supabase
+        .from('bookings')
+        .update({
+          ...updatePayload,
+          notes: cleanedNotes,
+        })
+        .eq('id', booking.id);
+
+      if (baseUpdateErr) throw baseUpdateErr;
+    }
 
     return res.json({
       success: true,

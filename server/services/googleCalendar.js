@@ -4,6 +4,7 @@
  * and event synchronization. Uses Node native fetch and zero external client SDKs.
  */
 
+import crypto from 'crypto';
 import { config } from '../config.js';
 import { tokenStore } from './tokenStore.js';
 import { generateOAuthState, verifyOAuthState } from '../utils/crypto.js';
@@ -286,7 +287,8 @@ export const googleCalendarService = {
     }
 
     try {
-      const res = await fetch(`${CALENDAR_API_BASE}/calendars/primary/events`, {
+      const requestId = String(booking.id || crypto.randomUUID());
+      const res = await fetch(`${CALENDAR_API_BASE}/calendars/primary/events?conferenceDataVersion=1`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -298,6 +300,14 @@ export const googleCalendarService = {
           start: { dateTime: startDateTime, timeZone },
           end: { dateTime: endDateTime, timeZone },
           attendees,
+          conferenceData: {
+            createRequest: {
+              requestId,
+              conferenceSolutionKey: {
+                type: 'hangoutsMeet',
+              },
+            },
+          },
           reminders: {
             useDefault: false,
             overrides: [
@@ -315,10 +325,25 @@ export const googleCalendarService = {
       }
 
       const eventData = await res.json();
+
+      // Extract Google Meet video link from conferenceData entryPoints
+      let meetLink = null;
+      if (eventData?.conferenceData?.entryPoints && Array.isArray(eventData.conferenceData.entryPoints)) {
+        const videoEntry = eventData.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video');
+        if (videoEntry?.uri) {
+          meetLink = videoEntry.uri;
+        }
+      }
+      // Fallback if hangoutLink is present at top-level
+      if (!meetLink && eventData?.hangoutLink) {
+        meetLink = eventData.hangoutLink;
+      }
+
       return {
         success: true,
         eventId: eventData.id,
         htmlLink: eventData.htmlLink,
+        meetLink,
       };
     } catch (err) {
       console.error('Google Calendar event creation failed:', err.message);

@@ -108,14 +108,16 @@ router.post('/events', async (req, res) => {
     if (result.success && result.eventId) {
       eventDeduplicationCache.set(booking.id, result.eventId);
 
-      // Persist google_event_id to database if real booking
+      // Persist google_event_id and meet_link to database if real booking
       if (serverSupabase && booking.id && !booking.id.startsWith('booking-')) {
+        const updatePayload = { google_event_id: result.eventId };
+        if (result.meetLink) updatePayload.meet_link = result.meetLink;
         serverSupabase
           .from('bookings')
-          .update({ google_event_id: result.eventId })
+          .update(updatePayload)
           .eq('id', booking.id)
           .then(({ error }) => {
-            if (error) console.warn('Could not persist google_event_id to Supabase (column may be pending):', error.message);
+            if (error) console.warn('Could not persist calendar details to Supabase (column may be pending):', error.message);
           })
           .catch(e => console.warn('Supabase update error (non-fatal):', e.message));
       }

@@ -14,6 +14,7 @@ import { whatsAppService } from '../../services/notifications/MockWhatsAppProvid
 import { isDemoSlug, createSeedState } from '../../data/seedData';
 import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
 import { dbService } from '../../services/supabase/dbService';
+import { customerBookingService } from '../../services/booking/customerBookingService';
 import { generateManagementToken, hashManagementToken, buildManagementUrl } from '../../utils/token';
 import './BookingPage.css';
 
@@ -238,7 +239,7 @@ export default function PublicBookingPage() {
     // Real Supabase persistence & authoritative double-booking protection
     if (!isDemo && isSupabaseConfigured() && provider?.id) {
       try {
-        const result = await dbService.createBookingAtomic({
+        const result = await customerBookingService.createBooking({
           providerId: provider.id,
           serviceId: service.id,
           customerName: customerInfo.name.trim(),
@@ -248,6 +249,7 @@ export default function PublicBookingPage() {
           bookingDate: selectedDate,
           startTime: selectedTime,
           notes: '',
+          managementToken,
           managementTokenHash: tokenHash,
         });
 

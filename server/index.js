@@ -9,6 +9,7 @@ import { config } from './config.js';
 import authRoutes from './routes/auth.js';
 import calendarRoutes from './routes/calendar.js';
 import publicBookingsRoutes from './routes/publicBookings.js';
+import internalNotificationsRoutes from './routes/internalNotifications.js';
 
 const app = express();
 
@@ -47,7 +48,9 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/auth/google', authRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/public/bookings', publicBookingsRoutes);
 app.use('/api/public/bookings/manage', publicBookingsRoutes);
+app.use('/api/internal/notifications', internalNotificationsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -55,6 +58,7 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     service: 'BookUp Backend',
     googleConfigured: config.isGoogleConfigured(),
+    richAutomateConfigured: config.isRichAutomateConfigured(),
     timestamp: new Date().toISOString(),
   });
 });

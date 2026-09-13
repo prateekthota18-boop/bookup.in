@@ -10,7 +10,9 @@
     "start": "node server/index.js",
     "build": "vite build",
     "lint": "oxlint",
-    "test": "node tests/test-customer-booking-management.js",
+    "test": "node tests/test-customer-booking-management.js && node tests/test-phase4-whatsapp.js && node tests/test-phase4b-email.js",
+    "test:phase4": "node tests/test-phase4-whatsapp.js",
+    "test:phase4b": "node tests/test-phase4b-email.js",
     "test:persistence": "node tests/test-customer-booking-persistence.js",
     "test:oauth": "node tests/test-provider-save-and-oauth.js",
     "preview": "vite preview"
@@ -21,6 +23,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "nodemailer": "^10.0.9",
     "react": "^19.2.8",
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.2.8",

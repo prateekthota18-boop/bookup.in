@@ -19,6 +19,41 @@ export function getApiBase() {
 
 export const customerBookingService = {
   /**
+   * Create booking via backend (authoritative conflict checks + server-side WhatsApp confirmations)
+   */
+  async createBooking(bookingPayload) {
+    const apiBase = getApiBase();
+    try {
+      const res = await fetch(`${apiBase}/public/bookings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(bookingPayload),
+      });
+
+      const result = await res.json();
+      if (res.ok && result.success) {
+        return result;
+      }
+      if (res.status === 409 || res.status === 400) {
+        throw new Error(result.error || 'Failed to create booking');
+      }
+      console.warn('Backend create booking returned error status, falling back to direct dbService:', result.error);
+    } catch (apiErr) {
+      if (apiErr.message?.includes('already booked') || apiErr.message?.includes('no longer available') || apiErr.message?.includes('conflicts')) {
+        throw apiErr;
+      }
+      console.warn('Backend API create error, falling back to direct dbService:', apiErr.message);
+    }
+
+    // Graceful direct Supabase fallback if backend server is sleeping or unreachable
+    if (isSupabaseConfigured()) {
+      return dbService.createBookingAtomic(bookingPayload);
+    }
+
+    throw new Error('Booking service is temporarily unavailable');
+  },
+
+  /**
    * Fetch appointment by management token from the backend
    */
   async getBooking(token) {
