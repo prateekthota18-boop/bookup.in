@@ -33,7 +33,7 @@ export const config = {
     process.env.RESEND_API_TOKEN ||
     ''
   ).trim(),
-  resendFromEmail: process.env.RESEND_FROM_EMAIL || process.env.resend_from_email || 'BookUp <onboarding@resend.dev>',
+  resendFromEmail: process.env.RESEND_FROM_EMAIL || process.env.resend_from_email || 'BookUp <bookings@bookup.work.gd>',
   isGoogleConfigured() {
     return Boolean(this.googleClientId && this.googleClientSecret && this.googleRedirectUri);
   },

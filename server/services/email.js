@@ -27,7 +27,7 @@ export class EmailService {
   }
 
   get fromEmail() {
-    return this._fromEmail !== null ? this._fromEmail : (process.env.RESEND_FROM_EMAIL || config.resendFromEmail || 'BookUp <onboarding@resend.dev>');
+    return this._fromEmail !== null ? this._fromEmail : (process.env.RESEND_FROM_EMAIL || config.resendFromEmail || 'BookUp <bookings@bookup.work.gd>');
   }
 
   isConfigured() {
