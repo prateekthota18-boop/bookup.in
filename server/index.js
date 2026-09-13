@@ -5,6 +5,7 @@
 
 import express from 'express';
 import cors from 'cors';
+import { createClient } from '@supabase/supabase-js';
 import { config } from './config.js';
 import authRoutes from './routes/auth.js';
 import calendarRoutes from './routes/calendar.js';
@@ -53,12 +54,46 @@ app.use('/api/public/bookings/manage', publicBookingsRoutes);
 app.use('/api/internal/notifications', internalNotificationsRoutes);
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  let supabaseStatus = 'unconfigured';
+  let supabaseError = null;
+  let serviceCheck = null;
+
+  const key = config.supabaseServiceRoleKey || config.supabaseKey;
+  if (config.supabaseUrl && key) {
+    try {
+      const client = createClient(config.supabaseUrl, key, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data, error } = await client.from('services').select('id, name, active').limit(3);
+      if (error) {
+        supabaseStatus = 'error';
+        supabaseError = { message: error.message, code: error.code, details: error.details, hint: error.hint };
+      } else {
+        supabaseStatus = 'connected';
+        serviceCheck = { count: data?.length, sample: data?.map(s => s.id) };
+      }
+    } catch (e) {
+      supabaseStatus = 'exception';
+      supabaseError = e.message;
+    }
+  }
+
   res.json({
     status: 'ok',
+    version: 'phase4b-diagnostic-v1',
     service: 'BookUp Backend',
     googleConfigured: config.isGoogleConfigured(),
+    emailConfigured: config.isEmailConfigured(),
     richAutomateConfigured: config.isRichAutomateConfigured(),
+    supabase: {
+      status: supabaseStatus,
+      host: config.supabaseUrl ? new URL(config.supabaseUrl).host : null,
+      keyType: config.supabaseServiceRoleKey ? 'service_role' : (config.supabaseKey ? 'anon/publishable' : 'none'),
+      keyPrefix: key ? key.substring(0, 10) + '...' : null,
+      error: supabaseError,
+      services: serviceCheck,
+    },
     timestamp: new Date().toISOString(),
   });
 });

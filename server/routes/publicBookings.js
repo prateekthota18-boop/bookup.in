@@ -136,7 +136,19 @@ async function handleCreateBooking(req, res) {
       .single();
 
     if (svcErr || !service) {
-      return res.status(400).json({ success: false, error: 'Invalid or inactive service' });
+      console.error('[PublicBookings] Service verification failed:', {
+        serviceId,
+        providerId,
+        svcErr: svcErr ? { message: svcErr.message, code: svcErr.code, details: svcErr.details, hint: svcErr.hint } : null,
+        serviceFound: Boolean(service),
+      });
+      return res.status(400).json({
+        success: false,
+        error: svcErr ? `Database error during service lookup: ${svcErr.message}` : 'Invalid or inactive service',
+        dbError: svcErr?.message,
+        dbCode: svcErr?.code,
+        dbDetails: svcErr?.details,
+      });
     }
 
     // 2. Fetch Authoritative Provider Details
@@ -147,7 +159,18 @@ async function handleCreateBooking(req, res) {
       .single();
 
     if (provErr || !provider) {
-      return res.status(400).json({ success: false, error: 'Provider not found' });
+      console.error('[PublicBookings] Provider verification failed:', {
+        providerId,
+        provErr: provErr ? { message: provErr.message, code: provErr.code, details: provErr.details } : null,
+        providerFound: Boolean(provider),
+      });
+      return res.status(400).json({
+        success: false,
+        error: provErr ? `Database error during provider lookup: ${provErr.message}` : 'Provider not found',
+        dbError: provErr?.message,
+        dbCode: provErr?.code,
+        dbDetails: provErr?.details,
+      });
     }
 
     const duration = Number(service.duration) || 60;
@@ -162,16 +185,36 @@ async function handleCreateBooking(req, res) {
     const candEnd = endMin + buffer;
 
     // 3. Authoritative Overlap Conflict Check
-    const { data: existingBookings, error: ebErr } = await supabase
-      .from('bookings')
-      .select('id, start_time, end_time, actual_end_time, status')
-      .eq('provider_id', providerId)
-      .eq('booking_date', bookingDate)
-      .in('status', ['confirmed', 'completed']);
+    let existingBookings = [];
+    try {
+      const { data: ebData, error: ebErr } = await supabase
+        .from('bookings')
+        .select('id, start_time, end_time, actual_end_time, status')
+        .eq('provider_id', providerId)
+        .eq('booking_date', bookingDate)
+        .in('status', ['confirmed', 'completed']);
 
-    if (ebErr) throw ebErr;
+      if (!ebErr && Array.isArray(ebData)) {
+        existingBookings = ebData;
+      } else if (ebErr) {
+        console.warn('[PublicBookings] Direct bookings table select restricted, trying get_provider_busy_slots RPC:', ebErr.message);
+      }
+    } catch (_e) {}
 
-    const conflict = existingBookings?.some(eb => {
+    // Fallback to security-definer RPC function if direct SELECT on bookings is restricted for anon
+    if (!existingBookings || existingBookings.length === 0) {
+      try {
+        const { data: rpcSlots, error: rpcErr } = await supabase.rpc('get_provider_busy_slots', {
+          p_provider_id: providerId,
+          p_booking_date: bookingDate,
+        });
+        if (!rpcErr && Array.isArray(rpcSlots)) {
+          existingBookings = rpcSlots;
+        }
+      } catch (_rpcErr) {}
+    }
+
+    const conflict = existingBookings.some(eb => {
       const ebStart = eb.start_time ? Number(eb.start_time.split(':')[0]) * 60 + Number(eb.start_time.split(':')[1]) : 0;
       const ebEndRaw = eb.actual_end_time || eb.end_time;
       const ebEnd = ebEndRaw ? Number(ebEndRaw.split(':')[0]) * 60 + Number(ebEndRaw.split(':')[1]) : ebStart + 60;

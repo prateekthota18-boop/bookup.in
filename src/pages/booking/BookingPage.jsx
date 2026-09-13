@@ -691,22 +691,6 @@ export default function PublicBookingPage() {
               )}
             </div>
 
-            {/* WhatsApp Confirmation Message Preview */}
-            <div className="confirmed-whatsapp-preview">
-              <div className="confirmed-whatsapp-label">
-                <span>💬</span> WhatsApp Message Confirmation (Simulated)
-              </div>
-              <div className="confirmed-whatsapp-bubble">
-                {whatsAppService.generateConfirmationMessage(
-                  confirmedBooking,
-                  provider,
-                  confirmedBooking.managementUrl || (confirmedBooking.managementToken ? buildManagementUrl(confirmedBooking.managementToken) : '')
-                )}
-                <div className="confirmed-whatsapp-time">
-                  {formatTime(confirmedBooking.startTime)} ✓✓
-                </div>
-              </div>
-            </div>
 
             <div className="confirmed-actions">
               <button

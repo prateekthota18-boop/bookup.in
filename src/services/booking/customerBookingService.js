@@ -23,34 +23,24 @@ export const customerBookingService = {
    */
   async createBooking(bookingPayload) {
     const apiBase = getApiBase();
+    let res;
     try {
-      const res = await fetch(`${apiBase}/public/bookings`, {
+      res = await fetch(`${apiBase}/public/bookings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(bookingPayload),
       });
-
-      const result = await res.json();
-      if (res.ok && result.success) {
-        return result;
-      }
-      if (res.status === 409 || res.status === 400) {
-        throw new Error(result.error || 'Failed to create booking');
-      }
-      console.warn('Backend create booking returned error status, falling back to direct dbService:', result.error);
-    } catch (apiErr) {
-      if (apiErr.message?.includes('already booked') || apiErr.message?.includes('no longer available') || apiErr.message?.includes('conflicts')) {
-        throw apiErr;
-      }
-      console.warn('Backend API create error, falling back to direct dbService:', apiErr.message);
+    } catch (networkErr) {
+      throw new Error(`Unable to reach booking server. Please check your connection and try again.`);
     }
 
-    // Graceful direct Supabase fallback if backend server is sleeping or unreachable
-    if (isSupabaseConfigured()) {
-      return dbService.createBookingAtomic(bookingPayload);
+    const result = await res.json().catch(() => ({}));
+    if (res.ok && result.success) {
+      return result;
     }
 
-    throw new Error('Booking service is temporarily unavailable');
+    // Never fall back to direct client Supabase insert: booking creation must always go through backend API.
+    throw new Error(result.error || result.details || 'Could not complete your booking. Please try again.');
   },
 
   /**

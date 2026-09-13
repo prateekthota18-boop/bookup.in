@@ -488,20 +488,6 @@ export default function CustomerBooking() {
             </div>
           </div>
 
-          {/* WhatsApp Confirmation Message Preview with Persistent URL */}
-          {isConfirmed && (
-            <div className="confirmed-whatsapp-preview" style={{ marginBottom: 'var(--space-5)' }}>
-              <div className="confirmed-whatsapp-label">
-                <span>💬</span> WhatsApp Message Confirmation (Simulated)
-              </div>
-              <div className="confirmed-whatsapp-bubble" style={{ whiteSpace: 'pre-wrap', fontSize: 'var(--font-size-xs)' }}>
-                {whatsAppService.generateConfirmationMessage(resolvedBooking, provider, managementUrl)}
-                <div className="confirmed-whatsapp-time">
-                  {formatTime(resolvedBooking.startTime)} ✓✓
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Cancellation Policy Box */}
           {policies && isConfirmed && (
