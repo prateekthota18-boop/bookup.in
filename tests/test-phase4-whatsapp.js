@@ -262,6 +262,7 @@ async function runPhase4Suite() {
   console.log('\n================================================================');
   console.log('✅ ALL PHASE 4 WHATSAPP TESTS PASSED (9/9 SECTIONS VERIFIED)');
   console.log('================================================================\n');
+  process.exit(0);
 }
 
 runPhase4Suite().catch(err => {

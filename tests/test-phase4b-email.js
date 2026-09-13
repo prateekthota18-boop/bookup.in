@@ -435,6 +435,7 @@ async function runPhase4bSuite() {
   console.log('\n================================================================');
   console.log('✅ ALL PHASE 4B TESTS PASSED (11/11 SECTIONS VERIFIED)');
   console.log('================================================================\n');
+  process.exit(0);
 }
 
 runPhase4bSuite().catch(err => {
