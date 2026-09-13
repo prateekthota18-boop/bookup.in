@@ -26,8 +26,14 @@ export const config = {
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '',
   richAutomateApiKey: process.env.RICH_AUTOMATE_API_KEY || '',
   internalCronSecret: process.env.INTERNAL_CRON_SECRET || '',
-  resendApiKey: process.env.RESEND_API_KEY || '',
-  resendFromEmail: process.env.RESEND_FROM_EMAIL || 'BookUp <onboarding@resend.dev>',
+  resendApiKey: (
+    process.env.RESEND_API_KEY ||
+    process.env.resend_api_key ||
+    process.env.RESEND_KEY ||
+    process.env.RESEND_API_TOKEN ||
+    ''
+  ).trim(),
+  resendFromEmail: process.env.RESEND_FROM_EMAIL || process.env.resend_from_email || 'BookUp <onboarding@resend.dev>',
   isGoogleConfigured() {
     return Boolean(this.googleClientId && this.googleClientSecret && this.googleRedirectUri);
   },

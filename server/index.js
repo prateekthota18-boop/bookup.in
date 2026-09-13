@@ -86,10 +86,12 @@ app.get('/api/health', async (req, res) => {
 
   res.json({
     status: 'ok',
-    version: 'phase4b-diagnostic-v1',
+    version: 'phase4b-diagnostic-v2',
     service: 'BookUp Backend',
+    uptimeSeconds: Math.floor(process.uptime()),
     googleConfigured: config.isGoogleConfigured(),
     emailConfigured: config.isEmailConfigured(),
+    resendEnvKeys: Object.keys(process.env).filter(k => /resend/i.test(k)),
     richAutomateConfigured: config.isRichAutomateConfigured(),
     supabase: {
       status: supabaseStatus,
