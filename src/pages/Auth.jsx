@@ -7,6 +7,9 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useStore, generateId } from '../data/store';
 import { ACTIONS } from '../data/actions';
 
+import BrandLogo from '../components/ui/BrandLogo';
+import PillButton from '../components/ui/PillButton';
+
 function AuthLayout({ children, title, subtitle }) {
   const navigate = useNavigate();
   const { dispatch } = useStore();
@@ -19,11 +22,8 @@ function AuthLayout({ children, title, subtitle }) {
   return (
     <div className="auth-page">
       <div className="auth-container">
-        <div className="auth-header">
-          <Link to="/" className="auth-logo">
-            <span className="logo-icon">B</span>
-            <span className="logo-text">BookUp</span>
-          </Link>
+        <div className="auth-header" style={{ display: 'flex', justifyContent: 'center', marginBottom: '28px' }}>
+          <BrandLogo size="lg" />
         </div>
         <div className="auth-card card card-padding">
           <h2 className="auth-title">{title}</h2>

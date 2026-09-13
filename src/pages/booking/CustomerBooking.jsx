@@ -27,6 +27,8 @@ import { MOCK_GCAL_BUSY_EVENTS } from '../../services/calendar/MockGoogleCalenda
 import { DEMO_PROVIDER, DEMO_POLICIES, DEMO_BOOKINGS, createSeedState } from '../../data/seedData';
 import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
 import { customerBookingService } from '../../services/booking/customerBookingService';
+import PillButton from '../../components/ui/PillButton';
+import BrandLogo from '../../components/ui/BrandLogo';
 import './BookingPage.css';
 
 export default function CustomerBooking() {
@@ -284,302 +286,214 @@ export default function CustomerBooking() {
   const isCancelled = resolvedBooking.status === 'cancelled' || resolvedBooking.status === 'late-cancellation';
   const isCompleted = resolvedBooking.status === 'completed';
 
+  const meetUrl = resolvedBooking?.meetLink || resolvedBooking?.meet_link;
+
   return (
-    <div className="booking-page">
-      <div className="booking-container">
-        {/* Navigation Breadcrumb */}
-        <div style={{ marginBottom: 'var(--space-4)' }}>
-          <Link
-            to={`/book/${providerSlug}`}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              color: 'var(--color-text-secondary)',
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: 500,
-              textDecoration: 'none',
-              transition: 'color var(--transition-fast)',
-            }}
-            onMouseOver={e => e.currentTarget.style.color = 'var(--color-primary-600)'}
-            onMouseOut={e => e.currentTarget.style.color = 'var(--color-text-secondary)'}
-          >
-            ← Back to booking page
-          </Link>
+    <div className="janjiyuk-booking-canvas">
+      <div className="janjiyuk-phone-card" style={{ maxWidth: 480 }}>
+        {/* Header Bar */}
+        <div className="booking-card-header">
+          <div className="header-left">
+            <Link to={`/book/${providerSlug}`} className="header-back-btn" title="Back to booking">
+              ‹
+            </Link>
+            <div>
+              <div className="header-provider-name">{provider?.businessName || provider?.name || 'BookUp'}</div>
+              <div className="header-step-sub">Appointment Management</div>
+            </div>
+          </div>
+          <BrandLogo iconOnly size={26} />
         </div>
 
-        {/* Provider / Portal Header */}
-        <div className="booking-provider-header" style={{ textAlign: 'center', marginBottom: 'var(--space-6)' }}>
-          <div className="avatar avatar-lg" style={{ margin: '0 auto var(--space-3)' }}>
+        {/* Confirmation / Management Header */}
+        <div className="manage-header-block animate-scale-up">
+          <div className="manage-avatar">
             {getInitials(provider?.name || 'U')}
           </div>
-
-          {isJustConfirmed ? (
-            <>
-              <div style={{ fontSize: '2.5rem', marginBottom: 'var(--space-2)' }}>🎉</div>
-              <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 700, margin: '0 0 var(--space-1)', color: 'var(--color-text)' }}>
-                You're booked!
-              </h1>
-              <div style={{ fontSize: 'var(--font-size-base)', fontWeight: 600, color: 'var(--color-primary-700)' }}>
-                Your appointment with {provider?.name} is confirmed.
-              </div>
-            </>
-          ) : (
-            <>
-              <h1 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, margin: '0 0 var(--space-1)', color: 'var(--color-text)' }}>
-                Manage your appointment
-              </h1>
-              <div style={{ fontSize: 'var(--font-size-base)', fontWeight: 600, color: 'var(--color-primary-700)' }}>
-                {provider?.name}
-              </div>
-            </>
-          )}
-
-          {provider?.businessName && (
-            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginTop: 2 }}>
-              {provider.businessName}
-            </div>
-          )}
+          <div className="manage-celebrate-badge">
+            {isCancelled ? '❌' : isCompleted ? '✓' : '🎉'}
+          </div>
+          <h1 className="manage-headline">
+            {isCancelled ? 'Appointment Cancelled' : isCompleted ? 'Session Completed' : "You're booked!"}
+          </h1>
+          <p className="manage-subline">
+            {isCancelled
+              ? `Your appointment with ${provider?.name} has been cancelled.`
+              : isCompleted
+              ? `Thank you for attending your session with ${provider?.name}.`
+              : `Your appointment with ${provider?.name} is confirmed.`}
+          </p>
         </div>
 
-        <div className="booking-step animate-fade-in-up">
+        <div className="booking-step-pane" style={{ paddingTop: 0 }}>
           {/* Rescheduled Success Alert */}
           {rescheduledSuccess && isConfirmed && (
-            <div style={{
-              padding: 'var(--space-4)',
-              background: 'var(--color-success-50)',
-              border: '1px solid var(--color-success-200)',
-              borderRadius: 'var(--radius-lg)',
-              marginBottom: 'var(--space-5)',
+            <div className="animate-fade-in-up" style={{
+              padding: '12px 16px',
+              background: 'var(--color-lime-light)',
+              borderRadius: '16px',
               display: 'flex',
               alignItems: 'center',
-              gap: 'var(--space-3)',
+              gap: '12px',
+              fontSize: '13px',
+              color: '#0E0E0E',
+              fontWeight: 600,
             }}>
-              <span style={{ fontSize: '1.25rem' }}>✓</span>
+              <span style={{ fontSize: '16px' }}>✓</span>
               <div>
-                <div style={{ fontWeight: 600, color: 'var(--color-success-700)', fontSize: 'var(--font-size-sm)' }}>
-                  Appointment rescheduled successfully.
-                </div>
-                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-success-600)', marginTop: 2 }}>
-                  Your appointment is now booked for {formatDate(resolvedBooking.date)} at {formatTime(resolvedBooking.startTime)}.
+                <div>Appointment rescheduled successfully!</div>
+                <div style={{ fontSize: '11.5px', fontWeight: 400, opacity: 0.8 }}>
+                  New slot: {formatDate(resolvedBooking.date)} at {formatTime(resolvedBooking.startTime)}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Cancelled Status Alert Banner */}
-          {isCancelled && (
-            <div style={{
-              padding: 'var(--space-4)',
-              background: 'var(--color-error-50)',
-              border: '1px solid var(--color-error-200)',
-              borderRadius: 'var(--radius-lg)',
-              marginBottom: 'var(--space-5)',
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 'var(--space-3)',
-            }}>
-              <span style={{ fontSize: '1.25rem' }}>❌</span>
-              <div>
-                <div style={{ fontWeight: 700, color: 'var(--color-error-700)', fontSize: 'var(--font-size-base)' }}>
-                  Appointment cancelled
-                </div>
-                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-error-600)', marginTop: 2 }}>
-                  {resolvedBooking.status === 'late-cancellation'
-                    ? `Late cancellation (under ${cancellationWindow}h notice). Deposit was forfeited according to policy.`
-                    : 'Cancelled within free cancellation window. Deposit has been refunded.'}
-                </div>
-              </div>
+          {/* Details Block: clean label/value rows */}
+          <div className="manage-details-card">
+            <div className="manage-detail-row">
+              <span className="manage-detail-label">Service</span>
+              <span className="manage-detail-val">{resolvedBooking.serviceName}</span>
             </div>
-          )}
-
-          {/* Completed Status Alert Banner */}
-          {isCompleted && (
-            <div style={{
-              padding: 'var(--space-4)',
-              background: 'var(--color-success-50)',
-              border: '1px solid var(--color-success-200)',
-              borderRadius: 'var(--radius-lg)',
-              marginBottom: 'var(--space-5)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-3)',
-            }}>
-              <span style={{ fontSize: '1.25rem' }}>✓</span>
-              <div>
-                <div style={{ fontWeight: 600, color: 'var(--color-success-700)', fontSize: 'var(--font-size-sm)' }}>
-                  Appointment Completed
-                </div>
-                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-success-600)', marginTop: 2 }}>
-                  Thank you for attending your session!
-                </div>
-              </div>
+            <div className="manage-detail-row">
+              <span className="manage-detail-label">Date</span>
+              <span className="manage-detail-val">{formatDate(resolvedBooking.date)}</span>
             </div>
-          )}
-
-          {/* Appointment Overview Summary Card */}
-          <div className="booking-summary" style={{ marginBottom: 'var(--space-5)' }}>
-            <div className="summary-row">
-              <span className="summary-label">Booking Reference</span>
-              <span className="summary-value" style={{ fontFamily: 'var(--font-family-mono)', fontSize: 'var(--font-size-xs)' }}>
-                {resolvedBooking.id}
+            <div className="manage-detail-row">
+              <span className="manage-detail-label">Time</span>
+              <span className="manage-detail-val">
+                {formatTime(resolvedBooking.startTime)} – {formatTime(resolvedBooking.endTime)}
               </span>
             </div>
-            <div className="summary-row">
-              <span className="summary-label">Service</span>
-              <span className="summary-value" style={{ fontWeight: 600 }}>{resolvedBooking.serviceName}</span>
+            <div className="manage-detail-row">
+              <span className="manage-detail-label">Duration</span>
+              <span className="manage-detail-val">{resolvedBooking.duration} min</span>
             </div>
-            <div className="summary-row">
-              <span className="summary-label">Date</span>
-              <span className="summary-value" style={{ fontWeight: 600 }}>{formatDate(resolvedBooking.date)}</span>
-            </div>
-            <div className="summary-row">
-              <span className="summary-label">Time</span>
-              <span className="summary-value" style={{ fontWeight: 600 }}>{formatTime(resolvedBooking.startTime)} – {formatTime(resolvedBooking.endTime)}</span>
-            </div>
-            <div className="summary-row">
-              <span className="summary-label">Duration</span>
-              <span className="summary-value">{resolvedBooking.duration} minutes</span>
-            </div>
-            <div className="summary-row summary-row-total">
-              <span className="summary-label">Total Amount</span>
-              <span className="summary-value">{formatCurrency(resolvedBooking.price)}</span>
-            </div>
-            <div className="summary-row">
-              <span className="summary-label">Status</span>
-              <span className={`badge ${getStatusBadgeClass(resolvedBooking.status)}`}>
+            <div className="manage-detail-row">
+              <span className="manage-detail-label">Status</span>
+              <span className="badge badge-active" style={{ textTransform: 'capitalize' }}>
                 {getStatusLabel(resolvedBooking.status)}
               </span>
             </div>
           </div>
 
-          {/* Customer Details Card */}
-          <div style={{
-            padding: 'var(--space-4)',
-            background: 'var(--color-gray-50)',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--color-border)',
-            marginBottom: 'var(--space-5)',
-            fontSize: 'var(--font-size-sm)',
-          }}>
-            <div style={{ fontWeight: 600, marginBottom: 'var(--space-2)', color: 'var(--color-text)' }}>Your Details</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)', fontSize: 'var(--font-size-xs)' }}>
-              <div>
-                <span style={{ color: 'var(--color-text-tertiary)' }}>Name: </span>
-                <span style={{ fontWeight: 500 }}>{resolvedBooking.customerName}</span>
-              </div>
-              <div>
-                <span style={{ color: 'var(--color-text-tertiary)' }}>Phone: </span>
-                <span>{resolvedBooking.customerPhone}</span>
-              </div>
-              {resolvedBooking.customerEmail && (
-                <div style={{ gridColumn: 'span 2' }}>
-                  <span style={{ color: 'var(--color-text-tertiary)' }}>Email: </span>
-                  <span>{resolvedBooking.customerEmail}</span>
-                </div>
-              )}
+          {/* Google Meet Block */}
+          {meetUrl ? (
+            <div className="manage-meet-block animate-fade-in-up">
+              <div className="manage-meet-title">Virtual Session via Google Meet</div>
+              <PillButton
+                variant="primary"
+                onClick={() => window.open(meetUrl, '_blank', 'noopener,noreferrer')}
+                style={{ width: '100%', justifyContent: 'center' }}
+              >
+                Join Google Meet →
+              </PillButton>
+              <a
+                href={meetUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="manage-meet-link"
+              >
+                {meetUrl}
+              </a>
             </div>
+          ) : (
+            <div className="manage-meet-pending">
+              Meet link will be sent before your session.
+            </div>
+          )}
+
+          {/* Customer Details Box: Quiet secondary styling */}
+          <div className="manage-customer-box">
+            <div className="manage-customer-heading">Customer Details</div>
+            <div className="manage-customer-row">
+              <span className="manage-customer-label">Name</span>
+              <span className="manage-customer-val">{resolvedBooking.customerName}</span>
+            </div>
+            <div className="manage-customer-row">
+              <span className="manage-customer-label">Phone</span>
+              <span className="manage-customer-val">{resolvedBooking.customerPhone}</span>
+            </div>
+            {resolvedBooking.customerEmail && (
+              <div className="manage-customer-row">
+                <span className="manage-customer-label">Email</span>
+                <span className="manage-customer-val">{resolvedBooking.customerEmail}</span>
+              </div>
+            )}
           </div>
 
-
-          {/* Customer Action Buttons */}
+          {/* Three Stacked Actions */}
           {isConfirmed && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-              <button
-                className="btn btn-primary btn-block btn-lg"
+            <div className="manage-actions-stack">
+              <PillButton
+                variant="primary"
                 onClick={handleOpenReschedule}
+                style={{ width: '100%', justifyContent: 'center' }}
               >
-                📅 Reschedule Appointment
-              </button>
+                Reschedule Appointment
+              </PillButton>
 
-              <button
-                className="btn btn-secondary btn-block"
+              <PillButton
+                variant="secondary"
                 onClick={handleAddToCalendar}
+                style={{ width: '100%', justifyContent: 'center' }}
               >
-                📅 Add to Calendar
-              </button>
+                Add to Calendar
+              </PillButton>
 
               <button
-                className="btn btn-secondary btn-block"
-                style={{ color: 'var(--color-error-600)' }}
+                type="button"
                 onClick={() => setShowCancelModal(true)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#EF4444',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  padding: '8px',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  transition: 'opacity var(--transition-fast)',
+                }}
+                onMouseOver={e => e.currentTarget.style.opacity = '0.75'}
+                onMouseOut={e => e.currentTarget.style.opacity = '1'}
               >
-                ✕ Cancel Appointment
+                Cancel Appointment
               </button>
-
-              <div style={{ borderTop: '1px solid var(--color-border)', margin: 'var(--space-2) 0' }} />
-
-              <Link
-                to={`/book/${providerSlug}`}
-                className="btn btn-secondary btn-block"
-                style={{ textAlign: 'center', textDecoration: 'none' }}
-              >
-                Book another appointment
-              </Link>
             </div>
           )}
 
-          {/* Cancelled State Actions */}
-          {isCancelled && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-              <Link
-                to={`/book/${providerSlug}`}
-                className="btn btn-primary btn-block btn-lg"
-                style={{ textAlign: 'center', textDecoration: 'none' }}
-              >
-                Book another appointment
-              </Link>
-              <Link
-                to={`/book/${providerSlug}`}
-                style={{
-                  textAlign: 'center',
-                  fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-text-secondary)',
-                  textDecoration: 'none',
-                  padding: 'var(--space-2)',
-                }}
-              >
-                ← Back to booking page
-              </Link>
-            </div>
-          )}
-
-          {/* Completed State Actions */}
-          {isCompleted && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-              <Link
-                to={`/book/${providerSlug}`}
-                className="btn btn-primary btn-block btn-lg"
-                style={{ textAlign: 'center', textDecoration: 'none' }}
-              >
-                Book another appointment
-              </Link>
-              <Link
-                to={`/book/${providerSlug}`}
-                style={{
-                  textAlign: 'center',
-                  fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-text-secondary)',
-                  textDecoration: 'none',
-                  padding: 'var(--space-2)',
-                }}
-              >
-                ← Back to booking page
+          {(isCancelled || isCompleted) && (
+            <div className="manage-actions-stack">
+              <Link to={`/book/${providerSlug}`} style={{ textDecoration: 'none' }}>
+                <PillButton
+                  variant="primary"
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  Book Another Appointment
+                </PillButton>
               </Link>
             </div>
           )}
         </div>
 
+        {/* Footer */}
+        <div className="booking-card-footer">
+          <div className="booking-powered-by">
+            Powered by <BrandLogo size={18} />
+          </div>
+        </div>
+
         {/* Reschedule Modal */}
         {showRescheduleModal && (
           <div className="modal-overlay" onClick={() => setShowRescheduleModal(false)}>
-            <div className="modal modal-md" onClick={e => e.stopPropagation()}>
+            <div className="modal modal-md" onClick={e => e.stopPropagation()} style={{ borderRadius: '24px', padding: '24px' }}>
               <div className="modal-header">
-                <h3>Reschedule Your Session</h3>
+                <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 800 }}>Reschedule Your Session</h3>
                 <button className="modal-close" onClick={() => setShowRescheduleModal(false)}>✕</button>
               </div>
               <div className="modal-body">
-                <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-4)' }}>
+                <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--theme-text-muted)', marginBottom: 'var(--space-4)' }}>
                   Current slot: <strong>{formatDate(resolvedBooking.date)} at {formatTime(resolvedBooking.startTime)}</strong>
                 </p>
 
@@ -621,9 +535,13 @@ export default function CustomerBooking() {
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontSize: 'var(--font-size-xs)',
-                            padding: '6px 4px',
+                            padding: '8px 4px',
+                            borderRadius: '12px',
                             opacity: slot.available ? 1 : 0.45,
                             cursor: slot.available ? 'pointer' : 'not-allowed',
+                            background: newTime === slot.time ? 'var(--color-lime)' : undefined,
+                            color: newTime === slot.time ? '#0E0E0E' : undefined,
+                            fontWeight: newTime === slot.time ? 700 : 500,
                           }}
                           onClick={() => slot.available && setNewTime(slot.time)}
                         >
@@ -637,27 +555,29 @@ export default function CustomerBooking() {
                       ))}
                     </div>
                   ) : (
-                    <div style={{ padding: 'var(--space-3)', background: 'var(--color-warning-50)', borderRadius: 'var(--radius-md)', color: 'var(--color-warning-700)', fontSize: 'var(--font-size-xs)' }}>
+                    <div style={{ padding: 'var(--space-3)', background: 'var(--theme-input-bg)', borderRadius: 'var(--radius-md)', color: 'var(--theme-text-muted)', fontSize: 'var(--font-size-xs)', textAlign: 'center' }}>
                       No available slots on this date. Please pick another date.
                     </div>
                   )}
                 </div>
 
                 {newTime && (
-                  <div style={{ padding: 'var(--space-3) var(--space-4)', background: 'var(--color-primary-50)', border: '1px solid var(--color-primary-200)', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-900)' }}>
+                  <div style={{ padding: 'var(--space-3) var(--space-4)', background: 'var(--color-lime-light)', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-sm)', color: '#0E0E0E', fontWeight: 600 }}>
                     Rescheduling to: <strong>{formatDate(newDate)} at {formatTime(newTime)}</strong>
                   </div>
                 )}
               </div>
-              <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setShowRescheduleModal(false)}>Cancel</button>
-                <button
-                  className="btn btn-primary"
+              <div className="modal-footer" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
+                <PillButton variant="ghost" onClick={() => setShowRescheduleModal(false)}>
+                  Cancel
+                </PillButton>
+                <PillButton
+                  variant="primary"
                   disabled={!newDate || !newTime}
                   onClick={handleConfirmReschedule}
                 >
                   Confirm Reschedule
-                </button>
+                </PillButton>
               </div>
             </div>
           </div>
@@ -666,61 +586,45 @@ export default function CustomerBooking() {
         {/* Cancel Confirmation Modal with Policy Evaluation */}
         {showCancelModal && (
           <div className="modal-overlay" onClick={() => setShowCancelModal(false)}>
-            <div className="modal modal-md" onClick={e => e.stopPropagation()}>
+            <div className="modal modal-md" onClick={e => e.stopPropagation()} style={{ borderRadius: '24px', padding: '24px' }}>
               <div className="modal-header">
-                <h3>Cancel Appointment</h3>
+                <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 800 }}>Cancel Appointment</h3>
                 <button className="modal-close" onClick={() => setShowCancelModal(false)}>✕</button>
               </div>
               <div className="modal-body">
                 <div style={{
                   padding: 'var(--space-3) var(--space-4)',
-                  background: 'var(--color-gray-50)',
-                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--theme-input-bg)',
+                  borderRadius: '16px',
                   marginBottom: 'var(--space-4)',
                   fontSize: 'var(--font-size-sm)'
                 }}>
-                  <div style={{ color: 'var(--color-text-tertiary)', fontSize: 'var(--font-size-xs)' }}>Appointment</div>
-                  <div style={{ fontWeight: 600 }}>{resolvedBooking.serviceName} with {provider?.name}</div>
-                  <div style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-xs)', marginTop: 2 }}>
+                  <div style={{ color: 'var(--theme-text-muted)', fontSize: 'var(--font-size-xs)' }}>Appointment</div>
+                  <div style={{ fontWeight: 700 }}>{resolvedBooking.serviceName} with {provider?.name}</div>
+                  <div style={{ color: 'var(--theme-text-muted)', fontSize: 'var(--font-size-xs)', marginTop: 2 }}>
                     {formatDate(resolvedBooking.date)} at {formatTime(resolvedBooking.startTime)}
                   </div>
                 </div>
 
-                <div style={{
-                  padding: 'var(--space-3) var(--space-4)',
-                  background: 'var(--color-gray-50)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-md)',
-                  color: 'var(--color-text-secondary)',
-                  fontSize: 'var(--font-size-sm)',
-                  marginBottom: 'var(--space-4)',
-                  lineHeight: 1.5,
-                }}>
-                  Please confirm if you would like to cancel this appointment with {provider?.name}.
-                </div>
-
-                <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)', fontWeight: 500, margin: 0 }}>
-                  Are you sure you want to cancel this appointment?
+                <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--theme-text-muted)', lineHeight: 1.5, marginBottom: '16px' }}>
+                  Please confirm if you would like to cancel your session with {provider?.name}.
                 </p>
               </div>
-              <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setShowCancelModal(false)}>
+              <div className="modal-footer" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <PillButton variant="ghost" onClick={() => setShowCancelModal(false)}>
                   Keep appointment
-                </button>
-                <button
-                  className="btn btn-danger"
+                </PillButton>
+                <PillButton
+                  variant="primary"
                   onClick={handleConfirmCancel}
+                  style={{ background: '#EF4444', color: '#FFFFFF' }}
                 >
                   Cancel appointment
-                </button>
+                </PillButton>
               </div>
             </div>
           </div>
         )}
-
-        <div className="booking-footer">
-          Powered by <strong>BookUp</strong>
-        </div>
       </div>
     </div>
   );

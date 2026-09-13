@@ -1,8 +1,7 @@
 /* ============================================
-   BookUp — Global Styles & Reset
+   BookUp — Global Styles & Reset ("Janjiyuk-tier")
    ============================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import './variables.css';
 
 /* --- Reset --- */
@@ -23,13 +22,14 @@ html {
 }
 
 body {
-  font-family: var(--font-family);
+  font-family: var(--font-body);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
-  line-height: var(--line-height-normal);
+  line-height: 1.5;
   color: var(--color-text);
-  background-color: var(--color-bg);
+  background-color: var(--theme-bg-page);
   min-height: 100vh;
+  transition: background-color var(--transition-base), color var(--transition-base);
 }
 
 img, svg, video {
@@ -38,12 +38,8 @@ img, svg, video {
 }
 
 a {
-  color: var(--color-text-link);
+  color: inherit;
   text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
 }
 
 button {
@@ -52,11 +48,17 @@ button {
   border: none;
   background: none;
   font-size: inherit;
+  transition: transform var(--transition-fast), background-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+button:active {
+  transform: scale(0.98) !important;
 }
 
 input, select, textarea {
   font-family: inherit;
   font-size: inherit;
+  color: inherit;
 }
 
 ul, ol {
@@ -68,35 +70,54 @@ table {
   width: 100%;
 }
 
+/* Headings with geometric bold sans */
 h1, h2, h3, h4, h5, h6 {
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-tight);
-  letter-spacing: var(--letter-spacing-tight);
+  font-family: var(--font-heading);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
   color: var(--color-text);
 }
 
-h1 { font-size: var(--font-size-4xl); }
-h2 { font-size: var(--font-size-3xl); }
+h1 { font-size: var(--font-size-5xl); }
+h2 { font-size: var(--font-size-4xl); }
 h3 { font-size: var(--font-size-2xl); }
 h4 { font-size: var(--font-size-xl); }
 h5 { font-size: var(--font-size-lg); }
 h6 { font-size: var(--font-size-md); }
 
+/* Accent italic for headline punch */
+.font-accent, .accent-italic, em.headline-accent {
+  font-family: var(--font-accent);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/* All-caps labels: medium weight, +2% letter-spacing */
+.label-caps, .uppercase-tag {
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.02em;
+  font-size: var(--font-size-xs);
+}
+
 p {
   color: var(--color-text-secondary);
-  line-height: var(--line-height-relaxed);
+  line-height: 1.6;
 }
 
 /* --- Focus Styles --- */
 :focus-visible {
-  outline: 2px solid var(--color-primary-500);
+  outline: 2px solid var(--color-lime);
   outline-offset: 2px;
 }
 
 /* --- Selection --- */
 ::selection {
-  background-color: var(--color-primary-100);
-  color: var(--color-primary-900);
+  background-color: var(--color-lime);
+  color: var(--color-black);
 }
 
 /* --- Scrollbar --- */
@@ -110,12 +131,12 @@ p {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-gray-300);
+  background: rgba(14, 14, 14, 0.15);
   border-radius: var(--radius-full);
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-gray-400);
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* --- Utility Classes --- */
@@ -165,30 +186,27 @@ p {
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }
   .container { padding: 0 var(--space-4); }
+  h1 { font-size: var(--font-size-4xl); }
+  h2 { font-size: var(--font-size-3xl); }
 }
 
 @media (min-width: 769px) {
   .hide-desktop { display: none !important; }
 }
 
-/* --- Animations --- */
+/* --- Animations & Micro-Interactions --- */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes slideInRight {
-  from { opacity: 0; transform: translateX(12px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.95); }
+  from { opacity: 0; transform: scale(0.96); }
   to { opacity: 1; transform: scale(1); }
 }
 
@@ -197,29 +215,41 @@ p {
 }
 
 .animate-fade-in {
-  animation: fadeIn var(--transition-slow) ease;
+  animation: fadeIn var(--transition-slow) ease forwards;
 }
 
 .animate-fade-in-up {
-  animation: fadeInUp var(--transition-smooth) ease;
+  animation: fadeInUp var(--transition-slow) cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-scale-in {
-  animation: scaleIn var(--transition-smooth) ease;
+  animation: scaleIn var(--transition-base) cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* --- Demo Mode Badge --- */
+/* Button micro-interaction: subtle scale up on hover */
+.btn-pill:hover,
+.btn-primary:hover,
+.btn-lime:hover,
+.pill-hover-scale:hover {
+  transform: scale(1.02);
+}
+
+/* Card entrance subtle rise */
+.card, .card-janjiyuk, .stat-card {
+  animation: fadeInUp var(--transition-slow) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Demo Mode Badge */
 .demo-badge {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
   padding: var(--space-1) var(--space-3);
-  background: var(--color-warning-50);
-  color: var(--color-warning-700);
-  border: 1px solid var(--color-warning-100);
+  background: var(--color-lime-soft);
+  color: #2F3D02;
   border-radius: var(--radius-full);
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  letter-spacing: var(--letter-spacing-wide);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.02em;
   text-transform: uppercase;
 }

@@ -11,6 +11,7 @@ import { getInitials, generateSlug } from '../../utils/helpers';
 import { realGoogleCalendarService } from '../../services/calendar/RealGoogleCalendarProvider';
 import { supabase, isSupabaseConfigured } from '../../services/supabase/supabaseClient';
 import { dbService } from '../../services/supabase/dbService';
+import PillButton from '../../components/ui/PillButton';
 
 export default function Settings() {
   const { state, dispatch, addToast } = useStore();
@@ -318,19 +319,42 @@ export default function Settings() {
           </div>
 
           {gcal.isConnected ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-              <span className="badge badge-active" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  borderRadius: 'var(--radius-pill)',
+                  background: 'var(--color-lime-soft)',
+                  color: '#243003',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                }}
+              >
+                <span style={{ fontSize: '14px', fontWeight: 800 }}>✓</span>
                 Connected as {gcal.email}
               </span>
-              <button className="btn btn-secondary btn-sm" onClick={handleDisconnectGcal}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleDisconnectGcal}
+                style={{ borderRadius: 'var(--radius-pill)' }}
+              >
                 Disconnect
               </button>
             </div>
           ) : (
-            <button className="btn btn-secondary btn-sm" onClick={handleConnectGcal} disabled={isConnectingGcal}>
-              {isConnectingGcal ? 'Connecting...' : '🔗 Connect Google Calendar'}
-            </button>
+            <PillButton
+              variant="primary"
+              size="sm"
+              arrow
+              onClick={handleConnectGcal}
+              disabled={isConnectingGcal}
+            >
+              {isConnectingGcal ? 'Connecting...' : 'Connect Google Calendar'}
+            </PillButton>
           )}
         </div>
 
@@ -384,25 +408,6 @@ export default function Settings() {
               </label>
             </div>
           ))}
-        </div>
-
-        {/* Simulated WhatsApp Preview */}
-        <div style={{ marginTop: 'var(--space-6)' }}>
-          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 'var(--space-2)' }}>
-            WhatsApp Preview (Simulated)
-          </div>
-          <div style={{
-            background: '#DCF8C6', borderRadius: '0 8px 8px 8px', padding: 'var(--space-3) var(--space-4)',
-            maxWidth: 340, fontSize: 'var(--font-size-sm)', boxShadow: 'var(--shadow-xs)', border: '1px solid rgba(0,0,0,0.05)',
-          }}>
-            <div style={{ fontWeight: 600, marginBottom: 4, color: '#075E54' }}>BookUp Reminders ✓✓</div>
-            <div style={{ fontSize: 13, color: 'var(--color-gray-700)', lineHeight: 1.5 }}>
-              Hi! This is a reminder for your appointment tomorrow with {provider.name || 'your provider'}.<br /><br />
-              📅 Tomorrow at 10:00 AM<br />
-              💼 Personal Training<br /><br />
-              See you soon! 👋
-            </div>
-          </div>
         </div>
       </div>
 

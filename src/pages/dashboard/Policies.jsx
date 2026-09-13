@@ -50,6 +50,28 @@ export default function Policies() {
         <button className="btn btn-primary" onClick={handleSave}>Save Changes</button>
       </div>
 
+      {/* Feature Preview Notice Banner */}
+      <div
+        style={{
+          background: 'var(--color-lime-soft)',
+          color: '#2B3505',
+          border: '1px solid var(--color-lime)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          marginBottom: 'var(--space-6)',
+          fontWeight: 500,
+          fontSize: '14px',
+        }}
+      >
+        <span style={{ fontSize: '20px' }}>💳</span>
+        <div>
+          <strong>Payment collection coming soon</strong> — Online deposit collection via Razorpay will be enabled in an upcoming release. Configure your policy rules below in advance.
+        </div>
+      </div>
+
       <div className="policies-grid">
         {/* Settings */}
         <div className="card card-padding">

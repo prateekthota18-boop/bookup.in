@@ -753,36 +753,6 @@ export default function Appointments() {
           </div>
         </div>
 
-        {/* WhatsApp Message Preview Panel */}
-        <div className="card card-padding" style={{ marginTop: 'var(--space-6)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
-            <span style={{ fontSize: '1.25rem' }}>💬</span>
-            <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, margin: 0 }}>WhatsApp Message Preview</h4>
-            <span className="badge badge-active" style={{ fontSize: 'var(--font-size-xs)' }}>Simulated WhatsApp</span>
-          </div>
-          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-4)' }}>
-            Message generated and dispatched to client's phone ({b.customerPhone}):
-          </p>
-
-          <div style={{
-            background: '#DCF8C6',
-            borderRadius: '0 12px 12px 12px',
-            padding: 'var(--space-4)',
-            maxWidth: 480,
-            fontSize: 'var(--font-size-sm)',
-            boxShadow: 'var(--shadow-sm)',
-            border: '1px solid rgba(0,0,0,0.06)',
-            whiteSpace: 'pre-wrap',
-            lineHeight: 1.5,
-            color: '#111b21',
-          }}>
-            {waPreviewText}
-            <div style={{ textAlign: 'right', fontSize: 11, color: '#667781', marginTop: 6 }}>
-              {formatTime(b.startTime)} ✓✓
-            </div>
-          </div>
-        </div>
-
         {/* Actions bar inside detail view */}
         {b.status === 'confirmed' && (
           <div className="card card-padding" style={{ marginTop: 'var(--space-6)' }}>

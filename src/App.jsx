@@ -113,12 +113,16 @@ function AppRoutes() {
   );
 }
 
+import { ThemeProvider } from './context/ThemeContext';
+
 export default function App() {
   return (
-    <StoreProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </StoreProvider>
+    <ThemeProvider>
+      <StoreProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </StoreProvider>
+    </ThemeProvider>
   );
 }

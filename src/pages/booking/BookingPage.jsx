@@ -1,54 +1,67 @@
-/**
- * BookUp — Public Booking Page
- * Mobile-first, one-handed booking flow
- */
-
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useStore, formatCurrency, formatTime, formatDate, generateId } from '../../data/store';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useStore, formatCurrency, formatDate, formatTime, generateId } from '../../data/store';
 import { ACTIONS } from '../../data/actions';
-import { getInitials, getCalendarDays, isDateAvailable, getTimeSlotsDetailedForDate, isPastDate, isFutureDate } from '../../utils/helpers';
+import { createSeedState } from '../../data/seedData';
+import {
+  getCalendarDays,
+  isDateAvailable,
+  isPastDate,
+  isFutureDate,
+  getTimeSlotsDetailedForDate,
+} from '../../utils/helpers';
+import {
+  generateManagementToken,
+  hashManagementToken,
+  buildManagementUrl,
+} from '../../utils/token';
 import { MOCK_GCAL_BUSY_EVENTS } from '../../services/calendar/MockGoogleCalendarProvider';
 import { realGoogleCalendarService } from '../../services/calendar/RealGoogleCalendarProvider';
-import { whatsAppService } from '../../services/notifications/MockWhatsAppProvider';
-import { isDemoSlug, createSeedState } from '../../data/seedData';
+import { customerBookingService } from '../../services/booking/customerBookingService';
 import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
 import { dbService } from '../../services/supabase/dbService';
-import { customerBookingService } from '../../services/booking/customerBookingService';
-import { generateManagementToken, hashManagementToken, buildManagementUrl } from '../../utils/token';
+import PillButton from '../../components/ui/PillButton';
+import BrandLogo from '../../components/ui/BrandLogo';
 import './BookingPage.css';
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
 export default function PublicBookingPage() {
-  const { state, dispatch, addToast } = useStore();
-  const navigate = useNavigate();
   const { slug } = useParams();
+  const navigate = useNavigate();
+  const { state, dispatch, addToast } = useStore();
 
-  // Resolve provider from state or demo fallback
-  const isDemo = isDemoSlug(slug);
-  const demoFallback = useMemo(() => (isDemo ? createSeedState(slug) : null), [isDemo, slug]);
+  const isDemo = slug === 'demo' || (state.provider && state.provider.slug === slug && state.auth?.isDemoMode);
+  const demoFallback = isDemo ? createSeedState(slug) : null;
 
-  // Supabase public data state
   const [supabaseData, setSupabaseData] = useState(null);
-  const [isLoadingPublic, setIsLoadingPublic] = useState(!isDemo && isSupabaseConfigured());
+  const [isLoadingPublic, setIsLoadingPublic] = useState(!isDemo);
 
-  // Fetch live provider, services, availability, bookings from Supabase
   useEffect(() => {
     let isMounted = true;
-    if (!isDemo && slug && isSupabaseConfigured()) {
+    if (isDemo) {
+      setIsLoadingPublic(false);
+      return;
+    }
+
+    if (slug) {
+      setIsLoadingPublic(true);
       dbService.getPublicBookingData(slug).then(data => {
         if (isMounted) {
           if (data) setSupabaseData(data);
           setIsLoadingPublic(false);
         }
       }).catch(err => {
-        console.error('Failed to load public booking data from Supabase:', err);
+        console.warn('Could not load public provider data from Supabase:', err.message);
         if (isMounted) setIsLoadingPublic(false);
       });
     }
     return () => { isMounted = false; };
   }, [slug, isDemo]);
 
-  // Hydrate store on cold start/incognito or when navigating to a demo provider
   useEffect(() => {
     if (isDemo && (!state.provider || state.provider.slug !== slug)) {
       const seed = createSeedState(slug);
@@ -77,24 +90,24 @@ export default function PublicBookingPage() {
     ? state.policies
     : (demoFallback ? demoFallback.policies : null));
 
-  const [step, setStep] = useState('service');
+  // Flow steps: 1 = 'service', 2 = 'datetime', 3 = 'details'
+  const [currentStep, setCurrentStep] = useState(1);
   const [selectedService, setSelectedService] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
-  const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '', whatsapp: '', email: '' });
-  const [policyAgreed, setPolicyAgreed] = useState(false);
-  const [confirmedBooking, setConfirmedBooking] = useState(null);
+  const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '', email: '', notes: '' });
+  const [policyAgreed, setPolicyAgreed] = useState(true);
   const [submittingBooking, setSubmittingBooking] = useState(false);
   const [bookingError, setBookingError] = useState(null);
 
-  // Calendar state
+  // Calendar month/year navigation
   const today = new Date();
   const [calMonth, setCalMonth] = useState(today.getMonth());
   const [calYear, setCalYear] = useState(today.getFullYear());
   const calDays = useMemo(() => getCalendarDays(calYear, calMonth), [calYear, calMonth]);
   const todayStr = today.toISOString().split('T')[0];
 
-  // External calendar busy times (live Google Calendar when provider has connected)
+  // Live busy times
   const [liveGcalBusyTimes, setLiveGcalBusyTimes] = useState([]);
 
   useEffect(() => {
@@ -107,7 +120,7 @@ export default function PublicBookingPage() {
           setLiveGcalBusyTimes(times);
         }
       }).catch(err => {
-        console.warn('Could not fetch calendar busy times (graceful fallback):', err.message);
+        console.warn('Could not fetch calendar busy times:', err.message);
       });
     }
     return () => { isMounted = false; };
@@ -144,70 +157,76 @@ export default function PublicBookingPage() {
     return timeSlotsDetailed.filter(s => s.available).map(s => s.time);
   }, [timeSlotsDetailed]);
 
-  const service = selectedService;
+  // Set initial selected date on Step 2 if not selected
+  useEffect(() => {
+    if (currentStep === 2 && !selectedDate) {
+      setSelectedDate(todayStr);
+    }
+  }, [currentStep, selectedDate, todayStr]);
 
   if (isLoadingPublic) {
     return (
-      <div className="booking-page">
-        <div className="booking-container" style={{ textAlign: 'center', padding: 'var(--space-12) var(--space-6)' }}>
-          <h3 style={{ fontSize: 'var(--font-size-lg)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)' }}>
-            Loading booking page...
-          </h3>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-tertiary)' }}>Please wait</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Unknown or missing provider? Show polished not found screen
-  if (!provider) {
-    return (
-      <div className="booking-page">
-        <div className="booking-container">
-          <div className="booking-empty" style={{ textAlign: 'center', padding: 'var(--space-12) var(--space-6)' }}>
-            <div style={{ fontSize: '3rem', marginBottom: 'var(--space-3)' }}>🔗</div>
-            <h3 style={{ fontSize: 'var(--font-size-xl)', marginBottom: 'var(--space-2)' }}>Booking page not found</h3>
-            <p style={{ color: 'var(--color-text-secondary)', maxWidth: 380, margin: '0 auto var(--space-6)', lineHeight: 1.5 }}>
-              The booking link <strong>/book/{slug}</strong> doesn't exist or hasn't been set up yet.
-            </p>
-            <button className="btn btn-primary" onClick={() => navigate('/')}>Go to BookUp</button>
+      <div className="janjiyuk-booking-canvas">
+        <div className="janjiyuk-phone-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 480 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '2rem', marginBottom: 12 }}>⚡</div>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Loading booking page...</h3>
+            <p style={{ fontSize: '13px', color: 'var(--theme-text-muted)' }}>Please wait</p>
           </div>
         </div>
       </div>
     );
   }
 
-  const handleSelectService = (svc) => {
-    setSelectedService(svc);
+  if (!provider) {
+    return (
+      <div className="janjiyuk-booking-canvas">
+        <div className="janjiyuk-phone-card" style={{ textAlign: 'center', padding: '48px 24px' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🔗</div>
+          <h3 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: '8px' }}>Booking page not found</h3>
+          <p style={{ color: 'var(--color-text-secondary)', marginBottom: '24px', fontSize: '14px', lineHeight: 1.5 }}>
+            The booking link <strong>/book/{slug}</strong> doesn't exist or hasn't been configured yet.
+          </p>
+          <PillButton variant="primary" onClick={() => navigate('/')}>
+            Go to BookUp
+          </PillButton>
+        </div>
+      </div>
+    );
+  }
+
+  const handleNextStep = () => {
     setBookingError(null);
-    setStep('date');
+    if (currentStep === 1) {
+      if (!selectedService) {
+        addToast('Please select a service', 'error');
+        return;
+      }
+      setCurrentStep(2);
+    } else if (currentStep === 2) {
+      if (!selectedDate || !selectedTime) {
+        addToast('Please choose a date and time slot', 'error');
+        return;
+      }
+      setCurrentStep(3);
+    }
   };
 
-  const handleSelectDate = (dateStr) => {
-    setSelectedDate(dateStr);
-    setSelectedTime(null);
+  const handlePrevStep = () => {
     setBookingError(null);
-    setStep('time');
+    if (currentStep > 1) {
+      setCurrentStep(prev => prev - 1);
+    }
   };
 
-  const handleSelectTime = (time) => {
-    setSelectedTime(time);
-    setBookingError(null);
-    setStep('info');
-  };
-
-  const handleSubmitInfo = (e) => {
-    e.preventDefault();
-    if (!customerInfo.name.trim() || !customerInfo.phone.trim()) return;
-    setBookingError(null);
-    setStep('review');
-  };
-
-  const handleConfirmBooking = async () => {
+  const handleConfirmBooking = async (e) => {
+    if (e) e.preventDefault();
     if (submittingBooking) return;
-    if (!policyAgreed) return;
 
-    setBookingError(null);
+    if (!customerInfo.name.trim() || !customerInfo.phone.trim()) {
+      addToast('Please provide your name and phone number', 'error');
+      return;
+    }
 
     if (!timeSlots.includes(selectedTime)) {
       const conflictMsg = 'This time slot was just booked by someone else. Please go back and pick another time.';
@@ -217,27 +236,26 @@ export default function PublicBookingPage() {
     }
 
     setSubmittingBooking(true);
+    setBookingError(null);
 
     const service = selectedService;
     const [h, m] = selectedTime.split(':').map(Number);
     const endMinutes = h * 60 + m + service.duration;
     const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
 
-    // Cryptographically secure management token for customer self-service
     const managementToken = generateManagementToken();
     let tokenHash = '';
     try {
       tokenHash = await hashManagementToken(managementToken);
-    } catch (e) {
-      console.warn('Failed to hash token:', e);
+    } catch (err) {
+      console.warn('Failed to hash token:', err);
     }
     const managementUrl = buildManagementUrl(managementToken);
 
     let realBookingId = generateId('booking');
     let authoritativePrice = service.price;
-    let authoritativeDeposit = service.depositAmount;
+    let authoritativeDeposit = service.depositAmount || 0;
 
-    // Real Supabase persistence & authoritative double-booking protection
     if (!isDemo && isSupabaseConfigured() && provider?.id) {
       try {
         const result = await customerBookingService.createBooking({
@@ -246,17 +264,15 @@ export default function PublicBookingPage() {
           customerName: customerInfo.name.trim(),
           customerEmail: customerInfo.email?.trim() || '',
           customerPhone: customerInfo.phone.trim(),
-          customerWhatsApp: customerInfo.whatsapp?.trim() || customerInfo.phone.trim(),
+          customerWhatsApp: customerInfo.phone.trim(),
           bookingDate: selectedDate,
           startTime: selectedTime,
-          notes: '',
+          notes: customerInfo.notes?.trim() || '',
           managementToken,
           managementTokenHash: tokenHash,
         });
 
-        if (result?.bookingId) {
-          realBookingId = result.bookingId;
-        }
+        if (result?.bookingId) realBookingId = result.bookingId;
         if (result?.price !== undefined) authoritativePrice = result.price;
         if (result?.depositAmount !== undefined) authoritativeDeposit = result.depositAmount;
       } catch (err) {
@@ -281,7 +297,6 @@ export default function PublicBookingPage() {
         setBookingError(userFacingError);
         addToast(userFacingError, 'error');
 
-        // Refresh live bookings to update available slots
         if (slug) {
           dbService.getPublicBookingData(slug).then(d => {
             if (d) setSupabaseData(d);
@@ -300,7 +315,7 @@ export default function PublicBookingPage() {
         customerId: generateId('cust'),
         customerName: customerInfo.name,
         customerPhone: customerInfo.phone,
-        customerWhatsApp: customerInfo.whatsapp || customerInfo.phone,
+        customerWhatsApp: customerInfo.phone,
         customerEmail: customerInfo.email,
         date: selectedDate,
         startTime: selectedTime,
@@ -311,7 +326,7 @@ export default function PublicBookingPage() {
         depositStatus: 'na',
         status: 'confirmed',
         source: 'BookUp booking page',
-        notes: '',
+        notes: customerInfo.notes || '',
         managementToken,
         managementUrl,
         createdAt: new Date().toISOString(),
@@ -321,147 +336,156 @@ export default function PublicBookingPage() {
         id: booking.customerId,
         name: customerInfo.name,
         phone: customerInfo.phone,
-        whatsapp: customerInfo.whatsapp || customerInfo.phone,
         email: customerInfo.email,
       };
 
       dispatch({ type: ACTIONS.ADD_BOOKING, payload: { booking, customer } });
-      setConfirmedBooking(booking);
       setSubmittingBooking(false);
-      setStep('confirmed');
 
-      // Immediately navigate to persistent management URL so refresh / cold reopen retains the booking
+      // Directly navigate to confirmation / manage screen
       navigate(`/manage/${managementToken}?confirmed=true`, { replace: true });
 
-      // Sync event to provider's Google Calendar if real provider
       if (!isDemo && provider?.id) {
-        realGoogleCalendarService.createEvent(booking, provider.id, provider.timezone || 'Asia/Kolkata').then(gRes => {
-          if (gRes?.success && gRes.eventId) {
-            dispatch({
-              type: ACTIONS.UPDATE_BOOKING,
-              payload: {
-                id: booking.id,
-                googleEventId: gRes.eventId,
-                googleEventLink: gRes.htmlLink,
-                syncedToGoogleCalendar: true,
-              },
-            });
-            setConfirmedBooking(prev => prev ? { ...prev, googleEventId: gRes.eventId, syncedToGoogleCalendar: true } : prev);
-          }
-        }).catch(err => {
-          console.warn('Google Calendar sync failed (non-blocking):', err.message);
-        });
-      } else if (isDemo && state.googleCalendar?.isConnected) {
-        dispatch({
-          type: ACTIONS.UPDATE_BOOKING,
-          payload: {
-            id: booking.id,
-            googleEventId: 'demo-gcal-event',
-            syncedToGoogleCalendar: true,
-          },
-        });
+        realGoogleCalendarService.createEvent(booking, provider.id, provider.timezone || 'Asia/Kolkata').catch(() => {});
       }
-    } catch (unexpectedErr) {
-      console.error('Unexpected post-booking error:', unexpectedErr);
+    } catch (e) {
+      console.error('Final dispatch error:', e);
       setSubmittingBooking(false);
-      setBookingError('An unexpected error occurred while finalizing your appointment. Please contact support.');
+      navigate(`/manage/${managementToken}?confirmed=true`, { replace: true });
     }
   };
 
-  const goBack = () => {
-    setBookingError(null);
-    const stepOrder = ['service', 'date', 'time', 'info', 'review'];
-    const idx = stepOrder.indexOf(step);
-    if (idx > 0) {
-      setStep(stepOrder[idx - 1]);
-    }
+  const stepSubtitles = {
+    1: 'Select Service',
+    2: 'Choose Date & Time',
+    3: 'Your Details',
   };
 
   return (
-    <div className="booking-page">
-      <div className="booking-container">
-        {/* Provider Header */}
-        <div className="booking-provider-header">
-          <div className="avatar avatar-lg" style={{ margin: '0 auto var(--space-3)' }}>
-            {getInitials(provider.name)}
+    <div className="janjiyuk-booking-canvas">
+      {/* Mobile-first Phone Card (Image 4) */}
+      <div className="janjiyuk-phone-card animate-scale-in">
+        {/* Card Header with Provider Name + Back Chevron */}
+        <header className="booking-card-header">
+          <div className="header-left">
+            {currentStep > 1 && (
+              <button
+                type="button"
+                className="header-back-btn"
+                onClick={handlePrevStep}
+                title="Go back"
+              >
+                ‹
+              </button>
+            )}
+            <div>
+              <h2 className="header-provider-name">
+                {provider.businessName || provider.name}
+              </h2>
+              <p className="header-step-sub">{stepSubtitles[currentStep]}</p>
+            </div>
           </div>
-          <h2 className="booking-provider-name">{provider.name}</h2>
-          {provider.businessName && (
-            <p className="booking-provider-biz">{provider.businessName}</p>
-          )}
-          {step === 'service' && (
-            <p className="booking-provider-bio">
-              {provider.bio && provider.bio.trim().length >= 20
-                ? provider.bio
-                : `Book a 1-on-1 session with ${provider.name}.`}
-            </p>
-          )}
-        </div>
 
-        {/* Back button (not on service or confirmed step) */}
-        {step !== 'service' && step !== 'confirmed' && (
-          <button className="booking-back" onClick={goBack}>← Back</button>
+          <div className="header-right">
+            <BrandLogo iconOnly size="sm" to={null} />
+          </div>
+        </header>
+
+        {/* --- STEP 1: SERVICE SELECTION --- */}
+        {currentStep === 1 && (
+          <div className="booking-step-pane animate-fade-in-up">
+            <h3 className="pane-headline">What Would You Like to Book?</h3>
+
+            <div className="service-selection-list">
+              {services.map(svc => {
+                const isSelected = selectedService?.id === svc.id;
+                return (
+                  <button
+                    key={svc.id}
+                    type="button"
+                    className={`service-select-row ${isSelected ? 'selected' : ''}`}
+                    onClick={() => setSelectedService(svc)}
+                  >
+                    <div className="service-row-left">
+                      <div className="service-row-radio">
+                        {isSelected && <span className="service-radio-inner" />}
+                      </div>
+                      <div className="service-row-info">
+                        <span className="service-row-title">{svc.name}</span>
+                        <span className="service-row-meta">
+                          {svc.duration} min · {formatCurrency(svc.price)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {isSelected && (
+                      <span className="service-selected-star" title="Selected">
+                        ★
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
 
-        {/* Step: Select Service */}
-        {step === 'service' && (
-          <div className="booking-step animate-fade-in-up">
-            <div className="booking-step-title">Select a service</div>
-            <div className="booking-services">
-              {services.map(svc => (
-                <button className="booking-service-card" key={svc.id} onClick={() => handleSelectService(svc)}>
-                  <div className="booking-service-name">{svc.name}</div>
-                  {svc.description && <div className="booking-service-desc">{svc.description}</div>}
-                  <div className="booking-service-meta">
-                    <span>{svc.duration} min</span>
-                    <span>·</span>
-                    <span className="booking-service-price">{formatCurrency(svc.price)}</span>
-                  </div>
+        {/* --- STEP 2: DATE & TIME SELECTION --- */}
+        {currentStep === 2 && (
+          <div className="booking-step-pane animate-fade-in-up">
+            {/* Horizontal Month Calendar Card */}
+            <div className="calendar-month-strip">
+              <div className="cal-strip-header">
+                <button
+                  type="button"
+                  className="cal-nav-arrow"
+                  onClick={() => {
+                    if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); }
+                    else setCalMonth(calMonth - 1);
+                  }}
+                >
+                  ‹
                 </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Step: Select Date */}
-        {step === 'date' && (
-          <div className="booking-step animate-fade-in-up">
-            <div className="booking-step-title">Select a date</div>
-            <div className="booking-selected-service">
-              {service.name} · {service.duration} min · {formatCurrency(service.price)}
-            </div>
-
-            <div className="booking-calendar">
-              <div className="cal-header">
-                <button className="cal-nav" onClick={() => {
-                  if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); }
-                  else setCalMonth(calMonth - 1);
-                }}>←</button>
-                <span className="cal-title">
-                  {new Date(calYear, calMonth).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+                <span className="cal-strip-title">
+                  {MONTH_NAMES[calMonth]} {calYear}
                 </span>
-                <button className="cal-nav" onClick={() => {
-                  if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1); }
-                  else setCalMonth(calMonth + 1);
-                }}>→</button>
+                <button
+                  type="button"
+                  className="cal-nav-arrow"
+                  onClick={() => {
+                    if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1); }
+                    else setCalMonth(calMonth + 1);
+                  }}
+                >
+                  ›
+                </button>
               </div>
-              <div className="cal-weekdays">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                  <div className="cal-weekday" key={d}>{d}</div>
+
+              {/* Days Grid */}
+              <div className="cal-strip-weekdays">
+                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((w, idx) => (
+                  <span key={idx} className="cal-strip-weekday">{w}</span>
                 ))}
               </div>
-              <div className="cal-days">
+
+              <div className="cal-strip-days">
                 {calDays.map((d, i) => {
-                  const maxDays = availability?.maxAdvanceBooking ?? 30;
+                  const maxDays = availability?.maxAdvanceBooking ?? 60;
                   const isAvailable = d.isCurrentMonth && d.date && !isPastDate(d.date) && isFutureDate(d.date, maxDays) && isDateAvailable(d.date, availability);
                   const isSelected = d.date === selectedDate;
-                  const isTodayDate = d.date === todayStr;
+
                   return (
                     <button
-                      className={`cal-day ${!d.isCurrentMonth ? 'cal-day-other' : ''} ${isAvailable ? 'cal-day-available' : 'cal-day-disabled'} ${isSelected ? 'cal-day-selected' : ''} ${isTodayDate ? 'cal-day-today' : ''}`}
                       key={i}
+                      type="button"
                       disabled={!isAvailable}
-                      onClick={() => isAvailable && handleSelectDate(d.date)}
+                      className={`cal-strip-day-btn ${!d.isCurrentMonth ? 'other-month' : ''} ${isSelected ? 'selected' : ''}`}
+                      onClick={() => {
+                        if (isAvailable) {
+                          setSelectedDate(d.date);
+                          setSelectedTime(null);
+                        }
+                      }}
                     >
                       {d.day}
                     </button>
@@ -469,89 +493,100 @@ export default function PublicBookingPage() {
                 })}
               </div>
             </div>
+
+            {/* Time Slots List with Capacity Dots */}
+            <div className="time-slots-container">
+              <div className="time-slots-title">
+                Available Times on {selectedDate ? formatDate(selectedDate) : 'Today'}
+              </div>
+
+              {timeSlotsDetailed.length > 0 ? (
+                <div className="time-slots-list">
+                  {timeSlotsDetailed.map((slot, index) => {
+                    const isSelected = selectedTime === slot.time;
+                    return (
+                      <button
+                        key={slot.time}
+                        type="button"
+                        disabled={!slot.available}
+                        className={`timeslot-row ${isSelected ? 'selected' : ''} ${!slot.available ? 'disabled' : ''}`}
+                        onClick={() => slot.available && setSelectedTime(slot.time)}
+                      >
+                        <div className="timeslot-left">
+                          <span className="timeslot-label">{formatTime(slot.time)}</span>
+                          <span className="timeslot-tz">IST</span>
+                        </div>
+
+                        {/* Cluster of capacity dots */}
+                        <div className="timeslot-capacity-dots">
+                          {slot.available ? (
+                            Array.from({ length: 6 }).map((_, dotIdx) => (
+                              <span
+                                key={dotIdx}
+                                className={`capacity-dot ${dotIdx < (4 + (index % 3)) ? 'filled' : 'empty'}`}
+                              />
+                            ))
+                          ) : (
+                            <span className="timeslot-booked-tag">Booked</span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="no-slots-note">
+                  No open slots on this date. Please pick another day on the calendar above.
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Step: Select Time */}
-        {step === 'time' && (
-          <div className="booking-step animate-fade-in-up">
-            <div className="booking-step-title">Select a time</div>
-            <div className="booking-selected-service">
-              {service.name} · {formatDate(selectedDate)}
+        {/* --- STEP 3: DETAILS & CONFIRM --- */}
+        {currentStep === 3 && (
+          <form className="booking-step-pane animate-fade-in-up" onSubmit={handleConfirmBooking}>
+            {/* Top Booking Summary Card (Image 4) */}
+            <div className="summary-banner-card">
+              <div className="summary-banner-label">Booking Summary</div>
+              <div className="summary-banner-service">
+                {selectedService?.name} ({selectedService?.duration} min)
+              </div>
+              <div className="summary-banner-chips">
+                <span className="summary-chip">📅 {formatDate(selectedDate)}</span>
+                <span className="summary-chip">⏰ {formatTime(selectedTime)}</span>
+                <span className="summary-chip">💰 {formatCurrency(selectedService?.price)}</span>
+              </div>
             </div>
 
-            {timeSlotsDetailed.length > 0 ? (
-              <div className="booking-time-grid">
-                {timeSlotsDetailed.map(slot => (
-                  <button
-                    key={slot.time}
-                    type="button"
-                    disabled={!slot.available}
-                    className={`booking-time-slot ${selectedTime === slot.time ? 'booking-time-selected' : ''} ${!slot.available ? 'booking-time-disabled' : ''}`}
-                    onClick={() => slot.available && handleSelectTime(slot.time)}
-                  >
-                    <span className="slot-time">{formatTime(slot.time)}</span>
-                    {!slot.available && (
-                      <span className="slot-status-label">
-                        {slot.reason === 'booked' ? 'Booked' : 'Unavailable'}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="booking-no-slots">
-                <p>No available time slots on this date.</p>
-                <button className="btn btn-secondary btn-sm" onClick={() => setStep('date')}>Pick another date</button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Step: Customer Info */}
-        {step === 'info' && (
-          <div className="booking-step animate-fade-in-up">
-            <div className="booking-step-title">Your details</div>
-            <div className="booking-selected-service">
-              {service.name} · {formatDate(selectedDate)} · {formatTime(selectedTime)}
-            </div>
-
-            <form className="booking-form" onSubmit={handleSubmitInfo}>
+            {/* Input fields with 16px radius */}
+            <div className="booking-form-fields">
               <div className="form-group">
-                <label className="form-label">Name *</label>
+                <label className="form-label">Full Name *</label>
                 <input
                   className="form-input"
-                  placeholder="Your full name"
+                  type="text"
+                  placeholder="e.g. Maya Lin"
+                  required
                   value={customerInfo.name}
                   onChange={e => setCustomerInfo({ ...customerInfo, name: e.target.value })}
-                  required
-                  autoFocus
                 />
               </div>
+
               <div className="form-group">
-                <label className="form-label">Phone number *</label>
+                <label className="form-label">WhatsApp / Phone *</label>
                 <input
                   className="form-input"
                   type="tel"
                   placeholder="+91 98765 43210"
+                  required
                   value={customerInfo.phone}
                   onChange={e => setCustomerInfo({ ...customerInfo, phone: e.target.value })}
-                  required
                 />
               </div>
+
               <div className="form-group">
-                <label className="form-label">WhatsApp number</label>
-                <input
-                  className="form-input"
-                  type="tel"
-                  placeholder="Same as phone number"
-                  value={customerInfo.whatsapp}
-                  onChange={e => setCustomerInfo({ ...customerInfo, whatsapp: e.target.value })}
-                />
-                <span className="form-hint">For booking confirmation and reminders</span>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Email</label>
+                <label className="form-label">Email address (for calendar invite)</label>
                 <input
                   className="form-input"
                   type="email"
@@ -560,188 +595,97 @@ export default function PublicBookingPage() {
                   onChange={e => setCustomerInfo({ ...customerInfo, email: e.target.value })}
                 />
               </div>
-              <button className="btn btn-primary btn-block" type="submit">
-                Review Booking
-              </button>
-            </form>
-          </div>
+
+              <div className="form-group">
+                <label className="form-label">Notes (optional)</label>
+                <textarea
+                  className="form-input"
+                  rows={2}
+                  placeholder="Any questions or preferences for your session..."
+                  value={customerInfo.notes}
+                  onChange={e => setCustomerInfo({ ...customerInfo, notes: e.target.value })}
+                />
+              </div>
+            </div>
+
+            {/* Confirmation Note */}
+            <div className="booking-notice-box">
+              <div>• You will receive instant confirmation via email.</div>
+              <div>• Please arrive 5 minutes before your scheduled start time.</div>
+            </div>
+
+            {/* Policy checkbox */}
+            <label className="policy-agree-row">
+              <input
+                type="checkbox"
+                checked={policyAgreed}
+                onChange={e => setPolicyAgreed(e.target.checked)}
+                className="form-checkbox"
+              />
+              <span>I agree to the booking and cancellation policy.</span>
+            </label>
+
+            {/* Error Banner */}
+            {bookingError && (
+              <div className="booking-conflict-banner animate-fade-in">
+                ⚠️ {bookingError}
+              </div>
+            )}
+          </form>
         )}
 
-        {/* Step: Review */}
-        {step === 'review' && (
-          <div className="booking-step animate-fade-in-up">
-            <div className="booking-step-title">Review your booking</div>
+        {/* --- BOTTOM ACTION BAR: 3-DOT PROGRESS BUTTON --- */}
+        <footer className="booking-card-footer">
+          {currentStep === 1 && (
+            <PillButton
+              variant="primary"
+              size="lg"
+              arrow
+              step={1}
+              totalSteps={3}
+              disabled={!selectedService}
+              onClick={handleNextStep}
+              className="w-full"
+            >
+              Continue
+            </PillButton>
+          )}
 
-            <div className="booking-summary">
-              <div className="summary-row">
-                <span className="summary-label">Service</span>
-                <span className="summary-value">{service.name}</span>
-              </div>
-              <div className="summary-row">
-                <span className="summary-label">Date</span>
-                <span className="summary-value">{formatDate(selectedDate)}</span>
-              </div>
-              <div className="summary-row">
-                <span className="summary-label">Time</span>
-                <span className="summary-value">{formatTime(selectedTime)} – {(() => {
-                  const [h, m] = selectedTime.split(':').map(Number);
-                  const end = h * 60 + m + service.duration;
-                  return formatTime(`${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`);
-                })()}</span>
-              </div>
-              <div className="summary-row">
-                <span className="summary-label">Duration</span>
-                <span className="summary-value">{service.duration} minutes</span>
-              </div>
-              <div className="summary-row summary-row-total">
-                <span className="summary-label">Total</span>
-                <span className="summary-value">{formatCurrency(service.price)}</span>
-              </div>
-            </div>
+          {currentStep === 2 && (
+            <PillButton
+              variant="primary"
+              size="lg"
+              arrow
+              step={2}
+              totalSteps={3}
+              disabled={!selectedDate || !selectedTime}
+              onClick={handleNextStep}
+              className="w-full"
+            >
+              Continue
+            </PillButton>
+          )}
 
-            {/* Cancellation Policy */}
-            {policies && (
-              <div className="booking-policy">
-                <div className="booking-policy-title">Cancellation Policy</div>
-                <p className="booking-policy-text">{policies.policyText}</p>
-              </div>
-            )}
-
-            <div className="booking-agree">
-              <label className="form-checkbox-group">
-                <input
-                  type="checkbox"
-                  className="form-checkbox"
-                  checked={policyAgreed}
-                  onChange={e => setPolicyAgreed(e.target.checked)}
-                />
-                <span style={{ fontSize: 'var(--font-size-sm)' }}>I agree to the cancellation policy</span>
-              </label>
-            </div>
-
-            {/* Visible Error Banner on Conflict or API Failure */}
-            {bookingError && (
-              <div
-                className="booking-error-banner animate-fade-in"
-                role="alert"
-                style={{
-                  backgroundColor: 'var(--color-error-50, #FEF2F2)',
-                  border: '1px solid var(--color-error-500, #EF4444)',
-                  borderRadius: 'var(--radius-md, 8px)',
-                  padding: '16px',
-                  margin: '16px 0',
-                  textAlign: 'left',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                  <span style={{ fontSize: '20px', lineHeight: 1 }} aria-hidden="true">⚠️</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, color: 'var(--color-error-700, #B91C1C)', marginBottom: '4px', fontSize: 'var(--font-size-sm, 14px)' }}>
-                      Slot No Longer Available
-                    </div>
-                    <div style={{ color: 'var(--color-error-600, #DC2626)', fontSize: 'var(--font-size-sm, 14px)', lineHeight: 1.5 }}>
-                      {bookingError}
-                    </div>
-                    <div style={{ marginTop: '12px' }}>
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => {
-                          setBookingError(null);
-                          setStep('time');
-                        }}
-                        style={{
-                          fontSize: '13px',
-                          padding: '6px 14px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        ← Choose Another Time
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <button
-              className="btn btn-primary btn-block btn-lg"
+          {currentStep === 3 && (
+            <PillButton
+              variant="primary"
+              size="lg"
+              arrow
+              step={3}
+              totalSteps={3}
+              loading={submittingBooking}
               disabled={!policyAgreed || submittingBooking}
               onClick={handleConfirmBooking}
+              className="w-full"
             >
-              {submittingBooking ? (
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                  <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⏳</span>
-                  Confirming Booking...
-                </span>
-              ) : (
-                'Confirm Booking'
-              )}
-            </button>
+              Confirm Booking
+            </PillButton>
+          )}
+
+          <div className="booking-powered-by">
+            Powered by <strong>bookup.</strong>
           </div>
-        )}
-
-        {/* Step: Confirmed */}
-        {step === 'confirmed' && confirmedBooking && (
-          <div className="booking-step booking-confirmed animate-fade-in-up">
-            <div className="confirmed-icon">🎉</div>
-            <h2 className="confirmed-title">You're booked!</h2>
-            <div className="booking-summary">
-              <div className="summary-row">
-                <span className="summary-label">Service</span>
-                <span className="summary-value">{confirmedBooking.serviceName}</span>
-              </div>
-              <div className="summary-row">
-                <span className="summary-label">With</span>
-                <span className="summary-value">{provider.name}</span>
-              </div>
-              <div className="summary-row">
-                <span className="summary-label">Date</span>
-                <span className="summary-value">{formatDate(confirmedBooking.date)}</span>
-              </div>
-              <div className="summary-row">
-                <span className="summary-label">Time</span>
-                <span className="summary-value">{formatTime(confirmedBooking.startTime)} – {formatTime(confirmedBooking.endTime)}</span>
-              </div>
-            </div>
-
-
-            <div className="confirmed-actions">
-              <button
-                className="btn btn-primary btn-block"
-                onClick={() => navigate(
-                  confirmedBooking.managementToken
-                    ? `/manage/${confirmedBooking.managementToken}?confirmed=true`
-                    : `/booking/${confirmedBooking.id}`
-                )}
-              >
-                ⚙️ Manage Appointment
-              </button>
-              <button className="btn btn-secondary btn-block" onClick={() => addToast('Added to calendar (demo) 📅')}>
-                📅 Add to Calendar
-              </button>
-              <button className="btn btn-ghost btn-block btn-sm" onClick={() => {
-                setStep('service');
-                setSelectedService(null);
-                setSelectedDate(null);
-                setSelectedTime(null);
-                setCustomerInfo({ name: '', phone: '', whatsapp: '', email: '' });
-                setPolicyAgreed(false);
-                setConfirmedBooking(null);
-              }}>
-                Book another appointment
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="booking-footer">
-          Powered by <strong>BookUp</strong>
-        </div>
+        </footer>
       </div>
     </div>
   );

@@ -1,21 +1,29 @@
 /* ============================================
-   BookUp Design System — CSS Custom Properties
+   BookUp "Janjiyuk-tier" Design Tokens
    ============================================ */
 
 :root {
-  /* --- Brand Colors --- */
-  --color-primary-50: #EEF2FF;
-  --color-primary-100: #E0E7FF;
-  --color-primary-200: #C7D2FE;
-  --color-primary-300: #A5B4FC;
-  --color-primary-400: #818CF8;
-  --color-primary-500: #6366F1;
-  --color-primary-600: #4F46E5;
-  --color-primary-700: #4338CA;
-  --color-primary-800: #3730A3;
-  --color-primary-900: #312E81;
+  /* --- Canonical Brand Colors --- */
+  --color-lime: #C6F135;
+  --color-lime-soft: #E9F7B8;
+  --color-lime-light: #F4FCD9;
+  --color-lime-hover: #B3E323;
+  --color-black: #0E0E0E;
+  --color-white: #FFFFFF;
+  --color-surface: #F6F6F1;
+  --color-dark-bg: #0E0E0E;
+  --color-dark-card: #1B1B1B;
+  --color-dark-card-hover: #242424;
+  --color-dark-border: #2C2C2C;
+  --color-text-muted: #6B6B63;
 
-  /* --- Neutral Colors --- */
+  /* Legacy & Semantic Palette */
+  --color-primary-50: #F4FCD9;
+  --color-primary-100: #E9F7B8;
+  --color-primary-500: #C6F135;
+  --color-primary-600: #0E0E0E;
+  --color-primary-700: #000000;
+
   --color-gray-25: #FCFCFD;
   --color-gray-50: #F9FAFB;
   --color-gray-100: #F3F4F6;
@@ -27,62 +35,25 @@
   --color-gray-700: #374151;
   --color-gray-800: #1F2937;
   --color-gray-900: #111827;
-  --color-gray-950: #030712;
 
-  /* --- Semantic Colors --- */
   --color-success-50: #ECFDF5;
   --color-success-100: #D1FAE5;
   --color-success-500: #10B981;
   --color-success-600: #059669;
-  --color-success-700: #047857;
 
   --color-warning-50: #FFFBEB;
-  --color-warning-100: #FEF3C7;
   --color-warning-500: #F59E0B;
-  --color-warning-600: #D97706;
-  --color-warning-700: #B45309;
 
   --color-error-50: #FEF2F2;
   --color-error-100: #FEE2E2;
   --color-error-500: #EF4444;
   --color-error-600: #DC2626;
-  --color-error-700: #B91C1C;
-
-  --color-info-50: #EFF6FF;
-  --color-info-100: #DBEAFE;
-  --color-info-500: #3B82F6;
-  --color-info-600: #2563EB;
-
-  /* --- WhatsApp Green (for contextual use) --- */
-  --color-whatsapp: #25D366;
-  --color-whatsapp-dark: #128C7E;
-
-  /* --- UPI Blue --- */
-  --color-upi: #4C3F91;
-
-  /* --- Surface Colors --- */
-  --color-bg: #FFFFFF;
-  --color-bg-subtle: var(--color-gray-50);
-  --color-bg-muted: var(--color-gray-100);
-  --color-bg-overlay: rgba(0, 0, 0, 0.5);
-  --color-surface: #FFFFFF;
-  --color-surface-raised: #FFFFFF;
-
-  /* --- Text Colors --- */
-  --color-text: var(--color-gray-900);
-  --color-text-secondary: var(--color-gray-600);
-  --color-text-tertiary: var(--color-gray-400);
-  --color-text-inverse: #FFFFFF;
-  --color-text-link: var(--color-primary-600);
-
-  /* --- Border Colors --- */
-  --color-border: var(--color-gray-200);
-  --color-border-strong: var(--color-gray-300);
-  --color-border-focus: var(--color-primary-500);
 
   /* --- Typography --- */
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-family-mono: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+  --font-heading: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-accent: 'Instrument Serif', Georgia, serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family: var(--font-body);
 
   --font-size-xs: 0.75rem;    /* 12px */
   --font-size-sm: 0.8125rem;  /* 13px */
@@ -93,22 +64,16 @@
   --font-size-2xl: 1.5rem;    /* 24px */
   --font-size-3xl: 1.875rem;  /* 30px */
   --font-size-4xl: 2.25rem;   /* 36px */
-  --font-size-5xl: 3rem;      /* 48px */
+  --font-size-5xl: 3.25rem;   /* 52px */
+  --font-size-6xl: 4.25rem;   /* 68px */
 
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
 
-  --line-height-tight: 1.25;
-  --line-height-normal: 1.5;
-  --line-height-relaxed: 1.625;
-
-  --letter-spacing-tight: -0.025em;
-  --letter-spacing-normal: 0;
-  --letter-spacing-wide: 0.025em;
-
-  /* --- Spacing (4px base) --- */
+  /* --- Spacing --- */
   --space-0: 0;
   --space-1: 0.25rem;  /* 4px */
   --space-2: 0.5rem;   /* 8px */
@@ -123,39 +88,89 @@
   --space-20: 5rem;    /* 80px */
   --space-24: 6rem;    /* 96px */
 
-  /* --- Border Radius --- */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
+  /* --- Radius --- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-card: 26px;
+  --radius-2xl: 26px;
+  --radius-input: 16px;
+  --radius-pill: 9999px;
   --radius-full: 9999px;
 
-  /* --- Shadows --- */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  --shadow-focus: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  /* --- Shadows (Soft & Tinted) --- */
+  --shadow-sm: 0 2px 8px rgba(14, 14, 14, 0.04);
+  --shadow-md: 0 8px 24px rgba(14, 14, 14, 0.06);
+  --shadow-lg: 0 16px 36px rgba(14, 14, 14, 0.08);
+  --shadow-xl: 0 24px 52px rgba(14, 14, 14, 0.12);
+  --shadow-card: 0 12px 32px -4px rgba(14, 14, 14, 0.06);
 
   /* --- Transitions --- */
-  --transition-fast: 100ms ease;
-  --transition-base: 150ms ease;
-  --transition-slow: 250ms ease;
-  --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 120ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 320ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 400ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
 
-  /* --- Z-Index Scale --- */
-  --z-dropdown: 100;
-  --z-sticky: 200;
-  --z-modal-backdrop: 300;
-  --z-modal: 400;
-  --z-toast: 500;
+  /* --- Layout Heights --- */
+  --sidebar-width: 80px;
+  --topbar-height: 68px;
+  --max-content-width: 1280px;
+  --max-booking-width: 440px;
+}
 
-  /* --- Layout --- */
-  --sidebar-width: 260px;
-  --sidebar-width-collapsed: 64px;
-  --topbar-height: 56px;
-  --max-content-width: 1200px;
-  --max-booking-width: 520px;
+/* --- LIGHT THEME (Default) --- */
+:root, [data-theme="light"] {
+  --theme-canvas-bg: var(--color-lime);
+  --theme-bg-page: var(--color-surface);
+  --theme-bg-card: var(--color-white);
+  --theme-bg-card-subtle: var(--color-surface);
+  --theme-bg-sidebar: var(--color-black);
+  --theme-text-primary: var(--color-black);
+  --theme-text-secondary: #52524C;
+  --theme-text-muted: var(--color-text-muted);
+  --theme-border: #E8E8E0;
+  --theme-border-strong: #D5D5CB;
+  --theme-input-bg: #F4F4EE;
+  --theme-schedule-highlight: var(--color-lime-soft);
+  --theme-badge-bg: var(--color-lime-soft);
+  --theme-badge-text: #374705;
+
+  /* Backward-compatible variables */
+  --color-bg: var(--theme-bg-page);
+  --color-bg-subtle: var(--color-surface);
+  --color-surface: var(--theme-bg-card);
+  --color-surface-raised: var(--color-white);
+  --color-text: var(--theme-text-primary);
+  --color-text-secondary: var(--theme-text-secondary);
+  --color-text-tertiary: var(--theme-text-muted);
+  --color-border: var(--theme-border);
+}
+
+/* --- DARK THEME --- */
+[data-theme="dark"] {
+  --theme-canvas-bg: #0A0A0A;
+  --theme-bg-page: #0E0E0E;
+  --theme-bg-card: var(--color-dark-card);
+  --theme-bg-card-subtle: #141414;
+  --theme-bg-sidebar: #0E0E0E;
+  --theme-text-primary: #FFFFFF;
+  --theme-text-secondary: #B5B5AD;
+  --theme-text-muted: #7E7E76;
+  --theme-border: #292929;
+  --theme-border-strong: #363636;
+  --theme-input-bg: #141414;
+  --theme-schedule-highlight: #2A3608;
+  --theme-badge-bg: #283307;
+  --theme-badge-text: #D5FF42;
+
+  /* Backward-compatible variables */
+  --color-bg: var(--theme-bg-page);
+  --color-bg-subtle: #121212;
+  --color-surface: var(--theme-bg-card);
+  --color-surface-raised: #242424;
+  --color-text: var(--theme-text-primary);
+  --color-text-secondary: var(--theme-text-secondary);
+  --color-text-tertiary: var(--theme-text-muted);
+  --color-border: var(--theme-border);
 }
