@@ -85,6 +85,8 @@ export default function PublicBookingPage() {
   const [paymentDone, setPaymentDone] = useState(false);
   const [policyAgreed, setPolicyAgreed] = useState(false);
   const [confirmedBooking, setConfirmedBooking] = useState(null);
+  const [submittingBooking, setSubmittingBooking] = useState(false);
+  const [bookingError, setBookingError] = useState(null);
 
   // Calendar state
   const today = new Date();
@@ -179,23 +181,27 @@ export default function PublicBookingPage() {
 
   const handleSelectService = (svc) => {
     setSelectedService(svc);
+    setBookingError(null);
     setStep('date');
   };
 
   const handleSelectDate = (dateStr) => {
     setSelectedDate(dateStr);
     setSelectedTime(null);
+    setBookingError(null);
     setStep('time');
   };
 
   const handleSelectTime = (time) => {
     setSelectedTime(time);
+    setBookingError(null);
     setStep('info');
   };
 
   const handleSubmitInfo = (e) => {
     e.preventDefault();
     if (!customerInfo.name.trim() || !customerInfo.phone.trim()) return;
+    setBookingError(null);
     if (requiresDeposit) {
       setStep('payment');
     } else {
@@ -205,17 +211,24 @@ export default function PublicBookingPage() {
 
   const handlePayment = () => {
     setPaymentDone(true);
+    setBookingError(null);
     setTimeout(() => setStep('review'), 800);
   };
 
   const handleConfirmBooking = async () => {
+    if (submittingBooking) return;
     if (!policyAgreed) return;
 
+    setBookingError(null);
+
     if (!timeSlots.includes(selectedTime)) {
-      addToast('Selected time slot is no longer available. Please choose another slot.', 'error');
-      setStep('time');
+      const conflictMsg = 'This time slot was just booked by someone else. Please go back and pick another time.';
+      setBookingError(conflictMsg);
+      addToast(conflictMsg, 'error');
       return;
     }
+
+    setSubmittingBooking(true);
 
     const service = selectedService;
     const [h, m] = selectedTime.split(':').map(Number);
@@ -260,88 +273,115 @@ export default function PublicBookingPage() {
         if (result?.depositAmount !== undefined) authoritativeDeposit = result.depositAmount;
       } catch (err) {
         console.error('Booking creation error:', err);
-        addToast(err.message || 'Failed to create booking. Please select another slot.', 'error');
-        // Refresh live bookings to update slots
+        setSubmittingBooking(false);
+
+        const rawMsg = err.message || '';
+        let userFacingError = 'Could not complete your booking. Please try again.';
+        if (
+          rawMsg.toLowerCase().includes('slot') ||
+          rawMsg.toLowerCase().includes('no longer available') ||
+          rawMsg.toLowerCase().includes('conflict') ||
+          rawMsg.includes('409')
+        ) {
+          userFacingError = 'This time slot was just booked by someone else. Please go back and pick another time.';
+        } else if (rawMsg.toLowerCase().includes('unable to reach') || rawMsg.toLowerCase().includes('network')) {
+          userFacingError = 'Unable to reach the booking server. Please check your connection and try again.';
+        } else if (rawMsg.trim()) {
+          userFacingError = rawMsg;
+        }
+
+        setBookingError(userFacingError);
+        addToast(userFacingError, 'error');
+
+        // Refresh live bookings to update available slots
         if (slug) {
           dbService.getPublicBookingData(slug).then(d => {
             if (d) setSupabaseData(d);
-          });
+          }).catch(() => {});
         }
         return;
       }
     }
 
-    const booking = {
-      id: realBookingId,
-      providerId: provider.id,
-      serviceId: service.id,
-      serviceName: service.name,
-      customerId: generateId('cust'),
-      customerName: customerInfo.name,
-      customerPhone: customerInfo.phone,
-      customerWhatsApp: customerInfo.whatsapp || customerInfo.phone,
-      customerEmail: customerInfo.email,
-      date: selectedDate,
-      startTime: selectedTime,
-      endTime,
-      duration: service.duration,
-      price: authoritativePrice,
-      depositAmount: authoritativeDeposit,
-      depositStatus: requiresDeposit ? 'paid' : 'na',
-      status: 'confirmed',
-      source: 'BookUp booking page',
-      notes: '',
-      managementToken,
-      managementUrl,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      const booking = {
+        id: realBookingId,
+        providerId: provider.id,
+        serviceId: service.id,
+        serviceName: service.name,
+        customerId: generateId('cust'),
+        customerName: customerInfo.name,
+        customerPhone: customerInfo.phone,
+        customerWhatsApp: customerInfo.whatsapp || customerInfo.phone,
+        customerEmail: customerInfo.email,
+        date: selectedDate,
+        startTime: selectedTime,
+        endTime,
+        duration: service.duration,
+        price: authoritativePrice,
+        depositAmount: authoritativeDeposit,
+        depositStatus: requiresDeposit ? 'paid' : 'na',
+        status: 'confirmed',
+        source: 'BookUp booking page',
+        notes: '',
+        managementToken,
+        managementUrl,
+        createdAt: new Date().toISOString(),
+      };
 
-    const customer = {
-      id: booking.customerId,
-      name: customerInfo.name,
-      phone: customerInfo.phone,
-      whatsapp: customerInfo.whatsapp || customerInfo.phone,
-      email: customerInfo.email,
-    };
+      const customer = {
+        id: booking.customerId,
+        name: customerInfo.name,
+        phone: customerInfo.phone,
+        whatsapp: customerInfo.whatsapp || customerInfo.phone,
+        email: customerInfo.email,
+      };
 
-    dispatch({ type: ACTIONS.ADD_BOOKING, payload: { booking, customer } });
-    setConfirmedBooking(booking);
-    setStep('confirmed');
+      dispatch({ type: ACTIONS.ADD_BOOKING, payload: { booking, customer } });
+      setConfirmedBooking(booking);
+      setSubmittingBooking(false);
+      setStep('confirmed');
 
-    // Immediately navigate to persistent management URL so refresh / cold reopen retains the booking
-    navigate(`/manage/${managementToken}?confirmed=true`, { replace: true });
+      // Immediately navigate to persistent management URL so refresh / cold reopen retains the booking
+      navigate(`/manage/${managementToken}?confirmed=true`, { replace: true });
 
-    // Sync event to provider's Google Calendar if real provider
-    if (!isDemo && provider?.id) {
-      realGoogleCalendarService.createEvent(booking, provider.id, provider.timezone || 'Asia/Kolkata').then(gRes => {
-        if (gRes?.success && gRes.eventId) {
-          dispatch({
-            type: ACTIONS.UPDATE_BOOKING,
-            payload: {
-              id: booking.id,
-              googleEventId: gRes.eventId,
-              googleEventLink: gRes.htmlLink,
-              syncedToGoogleCalendar: true,
-            },
-          });
-          setConfirmedBooking(prev => prev ? { ...prev, googleEventId: gRes.eventId, syncedToGoogleCalendar: true } : prev);
-        }
-      }).catch(err => {
-        console.warn('Google Calendar sync failed (non-blocking):', err.message);
-      });
-    } else if (isDemo && state.googleCalendar?.isConnected) {
-      dispatch({
-        type: ACTIONS.UPDATE_BOOKING,
-        payload: {
-          id: booking.id,
-          googleEventId: 'demo-gcal-event',
-          syncedToGoogleCalendar: true,
-        },
-      });
+      // Sync event to provider's Google Calendar if real provider
+      if (!isDemo && provider?.id) {
+        realGoogleCalendarService.createEvent(booking, provider.id, provider.timezone || 'Asia/Kolkata').then(gRes => {
+          if (gRes?.success && gRes.eventId) {
+            dispatch({
+              type: ACTIONS.UPDATE_BOOKING,
+              payload: {
+                id: booking.id,
+                googleEventId: gRes.eventId,
+                googleEventLink: gRes.htmlLink,
+                syncedToGoogleCalendar: true,
+              },
+            });
+            setConfirmedBooking(prev => prev ? { ...prev, googleEventId: gRes.eventId, syncedToGoogleCalendar: true } : prev);
+          }
+        }).catch(err => {
+          console.warn('Google Calendar sync failed (non-blocking):', err.message);
+        });
+      } else if (isDemo && state.googleCalendar?.isConnected) {
+        dispatch({
+          type: ACTIONS.UPDATE_BOOKING,
+          payload: {
+            id: booking.id,
+            googleEventId: 'demo-gcal-event',
+            syncedToGoogleCalendar: true,
+          },
+        });
+      }
+    } catch (unexpectedErr) {
+      console.error('Unexpected post-booking error:', unexpectedErr);
+      setSubmittingBooking(false);
+      setBookingError('An unexpected error occurred while finalizing your appointment. Please contact support.');
     }
   };
 
   const goBack = () => {
+    setBookingError(null);
     const stepOrder = ['service', 'date', 'time', 'info', 'payment', 'review'];
     const idx = stepOrder.indexOf(step);
     if (idx > 0) {
@@ -649,12 +689,67 @@ export default function PublicBookingPage() {
               </label>
             </div>
 
+            {/* Visible Error Banner on Conflict or API Failure */}
+            {bookingError && (
+              <div
+                className="booking-error-banner animate-fade-in"
+                role="alert"
+                style={{
+                  backgroundColor: 'var(--color-error-50, #FEF2F2)',
+                  border: '1px solid var(--color-error-500, #EF4444)',
+                  borderRadius: 'var(--radius-md, 8px)',
+                  padding: '16px',
+                  margin: '16px 0',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                  <span style={{ fontSize: '20px', lineHeight: 1 }} aria-hidden="true">⚠️</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, color: 'var(--color-error-700, #B91C1C)', marginBottom: '4px', fontSize: 'var(--font-size-sm, 14px)' }}>
+                      Slot No Longer Available
+                    </div>
+                    <div style={{ color: 'var(--color-error-600, #DC2626)', fontSize: 'var(--font-size-sm, 14px)', lineHeight: 1.5 }}>
+                      {bookingError}
+                    </div>
+                    <div style={{ marginTop: '12px' }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => {
+                          setBookingError(null);
+                          setStep('time');
+                        }}
+                        style={{
+                          fontSize: '13px',
+                          padding: '6px 14px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        ← Choose Another Time
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <button
               className="btn btn-primary btn-block btn-lg"
-              disabled={!policyAgreed}
+              disabled={!policyAgreed || submittingBooking}
               onClick={handleConfirmBooking}
             >
-              Confirm Booking
+              {submittingBooking ? (
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⏳</span>
+                  Confirming Booking...
+                </span>
+              ) : (
+                'Confirm Booking'
+              )}
             </button>
           </div>
         )}
