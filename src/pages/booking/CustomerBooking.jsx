@@ -446,13 +446,6 @@ export default function CustomerBooking() {
               <span className="summary-value">{formatCurrency(resolvedBooking.price)}</span>
             </div>
             <div className="summary-row">
-              <span className="summary-label">Deposit Status</span>
-              <span className={`badge ${getDepositBadgeClass(resolvedBooking.depositStatus)}`}>
-                {getDepositLabel(resolvedBooking.depositStatus)}
-                {resolvedBooking.depositAmount > 0 && ` (${formatCurrency(resolvedBooking.depositAmount)})`}
-              </span>
-            </div>
-            <div className="summary-row">
               <span className="summary-label">Status</span>
               <span className={`badge ${getStatusBadgeClass(resolvedBooking.status)}`}>
                 {getStatusLabel(resolvedBooking.status)}
@@ -488,14 +481,6 @@ export default function CustomerBooking() {
             </div>
           </div>
 
-
-          {/* Cancellation Policy Box */}
-          {policies && isConfirmed && (
-            <div className="booking-policy" style={{ marginBottom: 'var(--space-6)' }}>
-              <div className="booking-policy-title">Cancellation Policy</div>
-              <p className="booking-policy-text">{policies.policyText}</p>
-            </div>
-          )}
 
           {/* Customer Action Buttons */}
           {isConfirmed && (
@@ -701,47 +686,18 @@ export default function CustomerBooking() {
                   </div>
                 </div>
 
-                {isWithinFreeCancellation ? (
-                  <div style={{
-                    padding: 'var(--space-4)',
-                    background: 'var(--color-success-50)',
-                    border: '1px solid var(--color-success-200)',
-                    borderRadius: 'var(--radius-lg)',
-                    color: 'var(--color-success-700)',
-                    fontSize: 'var(--font-size-sm)',
-                    marginBottom: 'var(--space-4)',
-                  }}>
-                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                      You're still within the free cancellation period.
-                    </div>
-                    {resolvedBooking.depositAmount > 0 ? (
-                      <div>
-                        Your deposit of <strong>{formatCurrency(resolvedBooking.depositAmount)}</strong> will be refunded in full.
-                      </div>
-                    ) : (
-                      <div>No cancellation fee applies.</div>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{
-                    padding: 'var(--space-4)',
-                    background: 'var(--color-error-50)',
-                    border: '1px solid var(--color-error-200)',
-                    borderRadius: 'var(--radius-lg)',
-                    color: 'var(--color-error-700)',
-                    fontSize: 'var(--font-size-sm)',
-                    marginBottom: 'var(--space-4)',
-                  }}>
-                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                      This appointment is within the late-cancellation window.
-                    </div>
-                    <div>
-                      {resolvedBooking.depositAmount > 0
-                        ? `Your ${formatCurrency(resolvedBooking.depositAmount)} deposit will be forfeited.`
-                        : `A late cancellation fee of ${formatCurrency(policies?.lateCancellationFee || 200)} applies.`}
-                    </div>
-                  </div>
-                )}
+                <div style={{
+                  padding: 'var(--space-3) var(--space-4)',
+                  background: 'var(--color-gray-50)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--color-text-secondary)',
+                  fontSize: 'var(--font-size-sm)',
+                  marginBottom: 'var(--space-4)',
+                  lineHeight: 1.5,
+                }}>
+                  Please confirm if you would like to cancel this appointment with {provider?.name}.
+                </div>
 
                 <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)', fontWeight: 500, margin: 0 }}>
                   Are you sure you want to cancel this appointment?

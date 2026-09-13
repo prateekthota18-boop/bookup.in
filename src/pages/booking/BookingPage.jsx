@@ -82,7 +82,6 @@ export default function PublicBookingPage() {
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
   const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '', whatsapp: '', email: '' });
-  const [paymentDone, setPaymentDone] = useState(false);
   const [policyAgreed, setPolicyAgreed] = useState(false);
   const [confirmedBooking, setConfirmedBooking] = useState(null);
   const [submittingBooking, setSubmittingBooking] = useState(false);
@@ -146,7 +145,6 @@ export default function PublicBookingPage() {
   }, [timeSlotsDetailed]);
 
   const service = selectedService;
-  const requiresDeposit = service && service.depositAmount > 0;
 
   if (isLoadingPublic) {
     return (
@@ -202,17 +200,7 @@ export default function PublicBookingPage() {
     e.preventDefault();
     if (!customerInfo.name.trim() || !customerInfo.phone.trim()) return;
     setBookingError(null);
-    if (requiresDeposit) {
-      setStep('payment');
-    } else {
-      setStep('review');
-    }
-  };
-
-  const handlePayment = () => {
-    setPaymentDone(true);
-    setBookingError(null);
-    setTimeout(() => setStep('review'), 800);
+    setStep('review');
   };
 
   const handleConfirmBooking = async () => {
@@ -320,7 +308,7 @@ export default function PublicBookingPage() {
         duration: service.duration,
         price: authoritativePrice,
         depositAmount: authoritativeDeposit,
-        depositStatus: requiresDeposit ? 'paid' : 'na',
+        depositStatus: 'na',
         status: 'confirmed',
         source: 'BookUp booking page',
         notes: '',
@@ -382,12 +370,10 @@ export default function PublicBookingPage() {
 
   const goBack = () => {
     setBookingError(null);
-    const stepOrder = ['service', 'date', 'time', 'info', 'payment', 'review'];
+    const stepOrder = ['service', 'date', 'time', 'info', 'review'];
     const idx = stepOrder.indexOf(step);
     if (idx > 0) {
-      let prevStep = stepOrder[idx - 1];
-      if (prevStep === 'payment' && !requiresDeposit) prevStep = 'info';
-      setStep(prevStep);
+      setStep(stepOrder[idx - 1]);
     }
   };
 
@@ -431,11 +417,6 @@ export default function PublicBookingPage() {
                     <span>·</span>
                     <span className="booking-service-price">{formatCurrency(svc.price)}</span>
                   </div>
-                  {svc.depositAmount > 0 && (
-                    <div className="booking-service-deposit">
-                      {formatCurrency(svc.depositAmount)} deposit to confirm
-                    </div>
-                  )}
                 </button>
               ))}
             </div>
@@ -580,52 +561,9 @@ export default function PublicBookingPage() {
                 />
               </div>
               <button className="btn btn-primary btn-block" type="submit">
-                {requiresDeposit ? 'Continue to Payment' : 'Review Booking'}
+                Review Booking
               </button>
             </form>
-          </div>
-        )}
-
-        {/* Step: Simulated UPI Payment */}
-        {step === 'payment' && (
-          <div className="booking-step animate-fade-in-up">
-            <div className="booking-step-title">Pay deposit via UPI</div>
-            <div className="booking-payment">
-              <div className="payment-card">
-                <div className="payment-amount">{formatCurrency(service.depositAmount)}</div>
-                <div className="payment-label">Deposit to confirm booking</div>
-
-                <div className="payment-demo-badge">
-                  ⚠️ Demo payment (simulated UPI) — no real charges
-                </div>
-
-                <div className="payment-upi-options">
-                  <button className="upi-option" onClick={handlePayment}>
-                    <span className="upi-icon">📱</span>
-                    <span>Google Pay</span>
-                  </button>
-                  <button className="upi-option" onClick={handlePayment}>
-                    <span className="upi-icon">💳</span>
-                    <span>PhonePe</span>
-                  </button>
-                  <button className="upi-option" onClick={handlePayment}>
-                    <span className="upi-icon">💰</span>
-                    <span>Paytm</span>
-                  </button>
-                  <button className="upi-option" onClick={handlePayment}>
-                    <span className="upi-icon">🏦</span>
-                    <span>UPI ID</span>
-                  </button>
-                </div>
-
-                {paymentDone && (
-                  <div className="payment-success animate-scale-in">
-                    <span style={{ fontSize: '1.5rem' }}>✅</span>
-                    <span>Payment successful (simulated)</span>
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         )}
 
@@ -659,14 +597,6 @@ export default function PublicBookingPage() {
                 <span className="summary-label">Total</span>
                 <span className="summary-value">{formatCurrency(service.price)}</span>
               </div>
-              {requiresDeposit && (
-                <div className="summary-row">
-                  <span className="summary-label">Deposit paid</span>
-                  <span className="summary-value" style={{ color: 'var(--color-success-600)' }}>
-                    {formatCurrency(service.depositAmount)} ✓
-                  </span>
-                </div>
-              )}
             </div>
 
             {/* Cancellation Policy */}
@@ -776,14 +706,6 @@ export default function PublicBookingPage() {
                 <span className="summary-label">Time</span>
                 <span className="summary-value">{formatTime(confirmedBooking.startTime)} – {formatTime(confirmedBooking.endTime)}</span>
               </div>
-              {confirmedBooking.depositAmount > 0 && (
-                <div className="summary-row">
-                  <span className="summary-label">Deposit</span>
-                  <span className="summary-value" style={{ color: 'var(--color-success-600)' }}>
-                    {formatCurrency(confirmedBooking.depositAmount)} paid ✓
-                  </span>
-                </div>
-              )}
             </div>
 
 
@@ -807,7 +729,6 @@ export default function PublicBookingPage() {
                 setSelectedDate(null);
                 setSelectedTime(null);
                 setCustomerInfo({ name: '', phone: '', whatsapp: '', email: '' });
-                setPaymentDone(false);
                 setPolicyAgreed(false);
                 setConfirmedBooking(null);
               }}>

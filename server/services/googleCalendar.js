@@ -276,7 +276,7 @@ export const googleCalendarService = {
       `Client: ${booking.customerName}`,
       `Phone: ${booking.customerPhone}`,
       booking.customerEmail ? `Email: ${booking.customerEmail}` : '',
-      `Amount: ₹${booking.price} (${booking.depositStatus === 'paid' ? 'Deposit Paid' : 'No Deposit'})`,
+      `Amount: ₹${booking.price}`,
       `Booking Ref: ${booking.id}`,
       booking.notes ? `Notes: ${booking.notes}` : '',
     ].filter(Boolean).join('\n');

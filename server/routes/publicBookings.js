@@ -312,7 +312,7 @@ async function handleCreateBooking(req, res) {
       duration,
       price: Number(service.price) || 0,
       deposit_amount: Number(service.deposit_amount) || 0,
-      deposit_status: (Number(service.deposit_amount) || 0) > 0 ? 'paid' : 'na',
+      deposit_status: 'na',
       status: 'confirmed',
       notes: encodedNotes,
     };
@@ -618,7 +618,7 @@ router.get('/:token', async (req, res) => {
         duration: Number(bookingRow.duration) || 60,
         price: Number(bookingRow.price) || 0,
         depositAmount: Number(bookingRow.deposit_amount) || 0,
-        depositStatus: bookingRow.deposit_status || 'paid',
+        depositStatus: bookingRow.deposit_status || 'na',
         status: bookingRow.status,
         notes: cleanNotes,
         managementUrl,
@@ -878,9 +878,7 @@ router.post('/:token/cancel', async (req, res) => {
       status: newStatus,
       isWithinFreeWindow,
       depositAmount: Number(booking.deposit_amount) || 0,
-      message: isWithinFreeWindow
-        ? 'Appointment cancelled within free cancellation period. Deposit will be refunded.'
-        : 'Appointment cancelled within late-cancellation window. Deposit forfeited according to policy.',
+      message: 'Appointment cancelled successfully.',
     });
   } catch (err) {
     console.error('Error cancelling booking:', err.message);

@@ -35,9 +35,7 @@ export class MockWhatsAppProvider extends NotificationProvider {
     const dateFormatted = this.formatDateIndian(booking.date);
     const startFormatted = this.formatTimeAmPm(booking.startTime);
     const endFormatted = this.formatTimeAmPm(booking.endTime);
-    const depositNote = booking.depositAmount > 0
-      ? `\n💳 Deposit paid: ₹${booking.depositAmount}`
-      : '';
+    const depositNote = '';
 
     const manageLink =
       managementUrl ||
@@ -58,9 +56,7 @@ export class MockWhatsAppProvider extends NotificationProvider {
     const svcName = booking.serviceName || 'Session';
     const provName = provider?.name || 'your provider';
     const dateFormatted = this.formatDateIndian(booking.date);
-    const refundNote = booking.depositAmount > 0
-      ? `\n💰 Your deposit of ₹${booking.depositAmount} has been refunded to your UPI account.`
-      : '';
+    const refundNote = '';
 
     return `Hi ${custName},\n\nYour ${svcName} with ${provName} scheduled for ${dateFormatted} has been cancelled.${refundNote}\n\nYou can book another session anytime at ${provider?.slug ? `bookup.in/${provider.slug}` : 'our booking page'}.`;
   }
