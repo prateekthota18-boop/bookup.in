@@ -6,6 +6,7 @@ import { useStore, formatCurrency } from '../../data/store';
 import { ACTIONS } from '../../data/actions';
 import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
 import { dbService } from '../../services/supabase/dbService';
+import PillButton from '../../components/ui/PillButton';
 
 export default function Policies() {
   const { state, dispatch, addToast } = useStore();
@@ -41,13 +42,19 @@ export default function Policies() {
   };
 
   return (
-    <div className="animate-fade-in-up">
-      <div className="section-header">
+    <div className="animate-fade-in-up" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1 className="page-title">Policies & Deposits</h1>
-          <p className="page-subtitle">Protect your revenue with deposits and cancellation policies.</p>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
+            Cancellation & Deposit Policies
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--theme-text-muted)', margin: '3px 0 0' }}>
+            Configure your client cancellation policy and automated deposit rules.
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={handleSave}>Save Changes</button>
+        <PillButton variant="primary" size="md" onClick={handleSave}>
+          Save Changes
+        </PillButton>
       </div>
 
       {/* Feature Preview Notice Banner */}

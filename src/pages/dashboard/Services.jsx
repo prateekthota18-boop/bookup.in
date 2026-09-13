@@ -8,6 +8,7 @@ import { useStore, generateId, formatCurrency } from '../../data/store';
 import { ACTIONS } from '../../data/actions';
 import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
 import { dbService } from '../../services/supabase/dbService';
+import PillButton from '../../components/ui/PillButton';
 
 // Helper to detect obvious keyboard-mash gibberish
 function isGibberish(str) {
@@ -23,11 +24,11 @@ export default function Services() {
   const { state, dispatch, addToast } = useStore();
   const [showForm, setShowForm] = useState(false);
   const [editingService, setEditingService] = useState(null);
-  const [form, setForm] = useState({ name: '', description: '', price: '', duration: 60, depositAmount: '' });
+  const [form, setForm] = useState({ name: '', description: '', price: '', duration: 60 });
   const [errors, setErrors] = useState({});
 
   const openCreate = () => {
-    setForm({ name: '', description: '', price: '1000', duration: 60, depositAmount: '200' });
+    setForm({ name: '', description: '', price: '1000', duration: 60 });
     setEditingService(null);
     setErrors({});
     setShowForm(true);
@@ -39,7 +40,6 @@ export default function Services() {
       description: service.description || '',
       price: service.price,
       duration: service.duration,
-      depositAmount: service.depositAmount || '',
     });
     setEditingService(service);
     setErrors({});
@@ -82,7 +82,7 @@ export default function Services() {
           description: form.description.trim(),
           price: Number(form.price),
           duration: Number(form.duration),
-          depositAmount: Number(form.depositAmount) || 0,
+          depositAmount: 0,
         }).catch(err => console.error('Failed to update service in Supabase:', err));
       }
 
@@ -94,7 +94,7 @@ export default function Services() {
           description: form.description.trim(),
           price: Number(form.price),
           duration: Number(form.duration),
-          depositAmount: Number(form.depositAmount) || 0,
+          depositAmount: 0,
         }
       });
       addToast('Service updated ✓');
@@ -109,7 +109,7 @@ export default function Services() {
             description: form.description.trim(),
             price: Number(form.price),
             duration: Number(form.duration),
-            depositAmount: Number(form.depositAmount) || 0,
+            depositAmount: 0,
             isActive: true,
           });
           if (created?.id) {
@@ -129,7 +129,7 @@ export default function Services() {
           description: form.description.trim(),
           price: Number(form.price),
           duration: Number(form.duration),
-          depositAmount: Number(form.depositAmount) || 0,
+          depositAmount: 0,
           isActive: true,
           createdAt: new Date().toISOString(),
         }
@@ -161,79 +161,187 @@ export default function Services() {
   };
 
   return (
-    <div className="animate-fade-in-up">
-      <div className="section-header">
+    <div className="animate-fade-in-up" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Top Action Bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1 className="page-title">Services</h1>
-          <p className="page-subtitle">Manage the services your clients can book online.</p>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
+            Service Offerings
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--theme-text-muted)', margin: '3px 0 0' }}>
+            Manage the active services clients can book on your link.
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>
+        <PillButton variant="primary" size="md" onClick={openCreate}>
           + Add Service
-        </button>
+        </PillButton>
       </div>
 
       {state.services.length > 0 ? (
-        <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '18px' }}>
           {state.services.map(service => (
-            <div className="card card-padding card-hover" key={service.id}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
-                    <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600 }}>{service.name}</h4>
-                    <span className={`badge ${service.isActive ? 'badge-active' : 'badge-inactive'}`}>
-                      {service.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                  {service.description && (
-                    <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-3)', maxWidth: 560 }}>
-                      {service.description}
-                    </p>
-                  )}
-                  <div style={{ display: 'flex', gap: 'var(--space-6)', fontSize: 'var(--font-size-sm)' }}>
-                    <span><strong>{formatCurrency(service.price)}</strong></span>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>{service.duration} min</span>
-                    {service.depositAmount > 0 && (
-                      <span style={{ color: 'var(--color-primary-600)' }}>
-                        {formatCurrency(service.depositAmount)} deposit
-                      </span>
-                    )}
-                  </div>
+            <div
+              key={service.id}
+              className="card"
+              style={{
+                borderRadius: 'var(--radius-card)',
+                background: 'var(--theme-bg-card)',
+                boxShadow: 'var(--shadow-card)',
+                padding: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                transition: 'all var(--transition-fast)',
+                border: '1px solid var(--theme-border)',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '10px' }}>
+                  <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '17px', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
+                    {service.name}
+                  </h4>
+                  <span
+                    style={{
+                      padding: '3px 10px',
+                      borderRadius: 'var(--radius-pill)',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      background: service.isActive ? 'var(--color-lime-soft)' : 'var(--theme-input-bg)',
+                      color: service.isActive ? '#2B3505' : 'var(--theme-text-muted)',
+                      letterSpacing: '0.02em',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {service.isActive ? 'Active' : 'Inactive'}
+                  </span>
                 </div>
-                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => openEdit(service)}>Edit</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => handleToggle(service.id)}>
-                    {service.isActive ? 'Deactivate' : 'Activate'}
-                  </button>
-                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--color-error-600)' }} onClick={() => handleDelete(service.id)}>Delete</button>
+
+                {service.description && (
+                  <p style={{ fontSize: '13px', color: 'var(--theme-text-muted)', lineHeight: 1.5, margin: '0 0 16px', minHeight: '38px' }}>
+                    {service.description}
+                  </p>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 800, color: 'var(--color-text)' }}>
+                    {formatCurrency(service.price)}
+                  </span>
+                  <span style={{
+                    padding: '3px 10px',
+                    borderRadius: 'var(--radius-pill)',
+                    background: 'var(--theme-bg-card-subtle)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: 'var(--theme-text-muted)',
+                  }}>
+                    ⏱ {service.duration} min
+                  </span>
                 </div>
+              </div>
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: '8px',
+                paddingTop: '16px',
+                borderTop: '1px solid var(--theme-border)',
+              }}>
+                <button
+                  type="button"
+                  onClick={() => openEdit(service)}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid var(--theme-border)',
+                    borderRadius: 'var(--radius-pill)',
+                    padding: '6px 14px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    color: 'var(--color-text)',
+                    transition: 'all var(--transition-fast)',
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggle(service.id)}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid var(--theme-border)',
+                    borderRadius: 'var(--radius-pill)',
+                    padding: '6px 14px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    color: 'var(--color-text)',
+                    transition: 'all var(--transition-fast)',
+                  }}
+                >
+                  {service.isActive ? 'Deactivate' : 'Activate'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(service.id)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: 'var(--radius-pill)',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    color: 'var(--color-error-600)',
+                    transition: 'all var(--transition-fast)',
+                  }}
+                >
+                  Delete
+                </button>
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="card">
-          <div className="empty-state">
-            <div style={{ fontSize: '2rem', marginBottom: 12 }}>📋</div>
-            <div className="empty-state-title">No services yet</div>
-            <div className="empty-state-description">Create your first service to start accepting bookings.</div>
-            <button className="btn btn-primary" onClick={openCreate}>+ Add Service</button>
-          </div>
+        <div className="card" style={{ padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📋</div>
+          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700, margin: '0 0 6px' }}>
+            No services configured
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--theme-text-muted)', margin: '0 0 20px' }}>
+            Add your first service so clients can book appointments online.
+          </p>
+          <PillButton variant="primary" onClick={openCreate}>
+            + Add Service
+          </PillButton>
         </div>
       )}
 
       {/* Create/Edit Modal */}
       {showForm && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{editingService ? 'Edit Service' : 'Create Service'}</h3>
+          <div
+            className="modal modal-lg"
+            onClick={e => e.stopPropagation()}
+            style={{
+              borderRadius: '26px',
+              overflow: 'hidden',
+              background: 'var(--theme-bg-card)',
+              border: '1px solid var(--theme-border)',
+              boxShadow: 'var(--shadow-xl)',
+            }}
+          >
+            <div className="modal-header" style={{ borderBottom: '1px solid var(--theme-border)', padding: '20px 24px' }}>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700, margin: 0 }}>
+                {editingService ? 'Edit Service' : 'Create Service'}
+              </h3>
               <button className="modal-close" onClick={() => setShowForm(false)}>✕</button>
             </div>
             <form onSubmit={handleSubmit}>
-              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', padding: '24px' }}>
                 <div className="form-group">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <label className="form-label">Service name</label>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '13px' }}>Service name</label>
                     <span style={{ fontSize: 'var(--font-size-xs)', color: form.name.length >= 3 ? 'var(--color-success-600)' : 'var(--color-text-tertiary)' }}>
                       min 3 chars
                     </span>
@@ -248,13 +356,14 @@ export default function Services() {
                     }}
                     required
                     autoFocus
+                    style={{ borderRadius: '12px' }}
                   />
                   {errors.name && <span className="form-hint" style={{ color: 'var(--color-error-600)' }}>{errors.name}</span>}
                 </div>
 
                 <div className="form-group">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <label className="form-label">Description</label>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '13px' }}>Description</label>
                     <span style={{ fontSize: 'var(--font-size-xs)', color: form.description.length >= 15 ? 'var(--color-success-600)' : 'var(--color-text-tertiary)' }}>
                       {form.description.length}/15 min chars
                     </span>
@@ -268,6 +377,7 @@ export default function Services() {
                       if (errors.description) setErrors({ ...errors, description: null });
                     }}
                     rows={3}
+                    style={{ borderRadius: '12px' }}
                   />
                   {errors.description ? (
                     <span className="form-hint" style={{ color: 'var(--color-error-600)' }}>{errors.description}</span>
@@ -278,7 +388,7 @@ export default function Services() {
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">Price (₹)</label>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '13px' }}>Price (₹)</label>
                     <input
                       className="form-input"
                       type="number"
@@ -287,10 +397,11 @@ export default function Services() {
                       value={form.price}
                       onChange={e => setForm({ ...form, price: e.target.value })}
                       required
+                      style={{ borderRadius: '12px' }}
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Duration (minutes)</label>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '13px' }}>Duration (minutes)</label>
                     <input
                       className="form-input"
                       type="number"
@@ -299,27 +410,32 @@ export default function Services() {
                       value={form.duration}
                       onChange={e => setForm({ ...form, duration: e.target.value })}
                       required
+                      style={{ borderRadius: '12px' }}
                     />
                   </div>
                 </div>
-
-                <div className="form-group">
-                  <label className="form-label">UPI deposit to confirm (₹)</label>
-                  <input
-                    className="form-input"
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    value={form.depositAmount}
-                    onChange={e => setForm({ ...form, depositAmount: e.target.value })}
-                  />
-                  <span className="form-hint">Collected via UPI before confirming slot. Enter 0 for free booking.</span>
-                </div>
               </div>
 
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">{editingService ? 'Save Changes' : 'Create Service'}</button>
+              <div className="modal-footer" style={{ borderTop: '1px solid var(--theme-border)', padding: '16px 24px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid var(--theme-border)',
+                    borderRadius: 'var(--radius-pill)',
+                    padding: '8px 18px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    color: 'var(--color-text)',
+                  }}
+                >
+                  Cancel
+                </button>
+                <PillButton type="submit" variant="primary" size="sm">
+                  {editingService ? 'Save Changes' : 'Create Service'}
+                </PillButton>
               </div>
             </form>
           </div>

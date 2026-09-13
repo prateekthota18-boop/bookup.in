@@ -4,11 +4,18 @@ export default function StatCard({
   label,
   value,
   subtitle,
+  subtext,
   icon,
   arrowUp = false,
   highlight = false,
+  isActive = false,
+  onClick,
+  style = {},
   className = '',
 }) {
+  const finalSubtitle = subtitle || subtext;
+  const isSelected = highlight || isActive;
+
   // Count-up animation for numeric values
   const numericValue = typeof value === 'number' ? value : parseInt(value, 10);
   const isPureNumber = !isNaN(numericValue) && String(numericValue) === String(value).trim();
@@ -45,13 +52,17 @@ export default function StatCard({
   return (
     <div
       className={`stat-card-janjiyuk ${className}`}
+      onClick={onClick}
       style={{
-        border: highlight ? '1px solid var(--color-lime)' : undefined,
+        border: isSelected ? '1.5px solid var(--color-lime)' : undefined,
+        background: isSelected ? 'var(--color-lime-light)' : undefined,
+        cursor: onClick ? 'pointer' : undefined,
+        ...style,
       }}
     >
       <div className="stat-card-header">
         {icon && <span className="stat-card-icon-wrap">{icon}</span>}
-        <span>{label}</span>
+        <span style={{ fontWeight: 600 }}>{label}</span>
       </div>
 
       <div className="stat-card-value">
@@ -59,7 +70,7 @@ export default function StatCard({
         {arrowUp && <span className="stat-card-arrow-up">↑</span>}
       </div>
 
-      {subtitle && <div className="stat-card-subtext">{subtitle}</div>}
+      {finalSubtitle && <div className="stat-card-subtext">{finalSubtitle}</div>}
     </div>
   );
 }

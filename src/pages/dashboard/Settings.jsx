@@ -210,12 +210,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="animate-fade-in-up">
-      <div className="page-header">
-        <h1 className="page-title">Settings</h1>
-        <p className="page-subtitle">Manage your profile, calendar integrations, and account preferences.</p>
-      </div>
-
+    <div className="animate-fade-in-up" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Profile Completeness Meter */}
       <div className="card card-padding" style={{ marginBottom: 'var(--space-6)', borderLeft: '4px solid var(--color-primary-600)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
@@ -299,11 +294,13 @@ export default function Settings() {
               <input className="form-input" type="tel" value={phone} onChange={e => setPhone(e.target.value)} />
             </div>
           </div>
-          <button className="btn btn-primary" style={{ alignSelf: 'flex-start' }} onClick={handleSaveProfile}>
-            Save Profile
-          </button>
+            <div style={{ marginTop: '8px' }}>
+              <PillButton variant="primary" size="sm" onClick={handleSaveProfile}>
+                Save Profile
+              </PillButton>
+            </div>
+          </div>
         </div>
-      </div>
 
       {/* Google Calendar Integration (Optional) */}
       <div className="card card-padding" style={{ marginBottom: 'var(--space-6)' }}>

@@ -5,6 +5,7 @@
 import { useEffect, useRef } from 'react';
 import { useStore, formatCurrency, calculateMetrics } from '../../data/store';
 import { Chart, registerables } from 'chart.js';
+import StatCard from '../../components/ui/StatCard';
 
 Chart.register(...registerables);
 
@@ -32,8 +33,8 @@ export default function Analytics() {
           datasets: [{
             label: 'Appointments',
             data: analyticsData.monthlyData.map(d => d.appointments),
-            backgroundColor: 'rgba(99, 102, 241, 0.8)',
-            borderRadius: 6,
+            backgroundColor: '#0E0E0E',
+            borderRadius: 8,
             borderSkipped: false,
           }],
         },
@@ -46,7 +47,7 @@ export default function Analytics() {
           scales: {
             y: {
               beginAtZero: true,
-              grid: { color: 'rgba(0,0,0,0.06)' },
+              grid: { color: 'rgba(0,0,0,0.04)' },
               ticks: { font: { size: 12, family: 'Inter' } },
             },
             x: {
@@ -68,12 +69,13 @@ export default function Analytics() {
           datasets: [{
             label: 'Revenue (₹)',
             data: analyticsData.monthlyData.map(d => d.revenue),
-            borderColor: '#10B981',
-            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            borderColor: '#243003',
+            backgroundColor: 'rgba(198, 241, 53, 0.25)',
             fill: true,
-            tension: 0.3,
+            tension: 0.35,
             pointRadius: 4,
-            pointBackgroundColor: '#10B981',
+            pointBackgroundColor: '#C6F135',
+            pointBorderColor: '#0E0E0E',
           }],
         },
         options: {
@@ -85,7 +87,7 @@ export default function Analytics() {
           scales: {
             y: {
               beginAtZero: true,
-              grid: { color: 'rgba(0,0,0,0.06)' },
+              grid: { color: 'rgba(0,0,0,0.04)' },
               ticks: {
                 font: { size: 12, family: 'Inter' },
                 callback: (v) => `₹${(v / 1000).toFixed(0)}k`,
@@ -109,47 +111,79 @@ export default function Analytics() {
   const totalBookings = state.bookings.filter(b => b.status !== 'cancelled').length;
   const cancellations = state.bookings.filter(b => b.status === 'cancelled' || b.status === 'late-cancellation').length;
   const cancellationRate = totalBookings > 0 ? ((cancellations / (totalBookings + cancellations)) * 100).toFixed(1) : '0.0';
+  const confirmedCount = state.bookings.filter(b => b.status === 'confirmed').length;
+  const completedCount = state.bookings.filter(b => b.status === 'completed').length;
 
-  const CARDS = [
-    { label: 'Total appointments', value: totalBookings, icon: '📅' },
-    { label: 'Revenue', value: formatCurrency(metrics.totalRevenue), icon: '💰' },
-    { label: 'Cancellation rate', value: `${cancellationRate}%`, icon: '❌' },
-    { label: 'No-show rate', value: `${metrics.noShowRate}%`, icon: '🚫' },
-    { label: 'Deposits collected', value: formatCurrency(metrics.depositsCollected), icon: '🏦' },
-    { label: 'Revenue protected', value: formatCurrency(metrics.revenueProtected), icon: '🛡️' },
+  const STATS = [
+    { label: 'Total Appointments', value: totalBookings, icon: '📅', subtitle: 'All active bookings' },
+    { label: 'Total Revenue', value: formatCurrency(metrics.totalRevenue), icon: '💰', subtitle: 'Completed & confirmed value', arrowUp: true },
+    { label: 'Confirmed Slots', value: confirmedCount, icon: '✨', subtitle: 'Upcoming scheduled' },
+    { label: 'Completed Sessions', value: completedCount, icon: '✅', subtitle: 'Fulfilled appointments' },
+    { label: 'Cancellation Rate', value: `${cancellationRate}%`, icon: '❌', subtitle: `${cancellations} cancelled` },
+    { label: 'No-Show Rate', value: `${metrics.noShowRate}%`, icon: '🚫', subtitle: 'Client missed slots' },
   ];
 
   return (
-    <div className="animate-fade-in-up">
-      <div className="page-header">
-        <h1 className="page-title">Analytics</h1>
-        <p className="page-subtitle">Track your business performance.</p>
+    <div className="animate-fade-in-up" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Metric StatCards Grid */}
+      <div>
+        <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 700, margin: '0 0 14px', color: 'var(--color-text)' }}>
+          Performance Metrics
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+          {STATS.map((stat, i) => (
+            <StatCard
+              key={i}
+              label={stat.label}
+              value={stat.value}
+              icon={stat.icon}
+              subtitle={stat.subtitle}
+              arrowUp={stat.arrowUp}
+            />
+          ))}
+        </div>
       </div>
 
-      {/* Metric Cards */}
-      <div className="metrics-grid" style={{ marginBottom: 'var(--space-8)' }}>
-        {CARDS.map((card, i) => (
-          <div className="metric-card" key={i}>
-            <div className="metric-card-label">
-              <span style={{ marginRight: 6 }}>{card.icon}</span>
-              {card.label}
-            </div>
-            <div className="metric-card-value">{card.value}</div>
+      {/* Charts Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+        <div
+          className="card"
+          style={{
+            borderRadius: 'var(--radius-card)',
+            background: 'var(--theme-bg-card)',
+            border: '1px solid var(--theme-border)',
+            boxShadow: 'var(--shadow-card)',
+            padding: '24px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
+              Appointments Trend
+            </h4>
+            <span style={{ fontSize: '12px', color: 'var(--theme-text-muted)' }}>Monthly volume</span>
           </div>
-        ))}
-      </div>
-
-      {/* Charts */}
-      <div className="analytics-charts-grid">
-        <div className="card card-padding">
-          <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, marginBottom: 'var(--space-4)' }}>Appointments Trend</h4>
-          <div style={{ height: 280 }}>
+          <div style={{ height: 260 }}>
             <canvas ref={chartRef1} />
           </div>
         </div>
-        <div className="card card-padding">
-          <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, marginBottom: 'var(--space-4)' }}>Revenue Trend</h4>
-          <div style={{ height: 280 }}>
+
+        <div
+          className="card"
+          style={{
+            borderRadius: 'var(--radius-card)',
+            background: 'var(--theme-bg-card)',
+            border: '1px solid var(--theme-border)',
+            boxShadow: 'var(--shadow-card)',
+            padding: '24px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
+              Revenue Trend
+            </h4>
+            <span style={{ fontSize: '12px', color: 'var(--theme-text-muted)' }}>Gross booking value</span>
+          </div>
+          <div style={{ height: 260 }}>
             <canvas ref={chartRef2} />
           </div>
         </div>
@@ -157,3 +191,4 @@ export default function Analytics() {
     </div>
   );
 }
+

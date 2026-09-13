@@ -23,6 +23,8 @@ import { MOCK_GCAL_BUSY_EVENTS } from '../../services/calendar/MockGoogleCalenda
 import { realGoogleCalendarService } from '../../services/calendar/RealGoogleCalendarProvider';
 import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
 import { dbService } from '../../services/supabase/dbService';
+import StatCard from '../../components/ui/StatCard';
+import PillButton from '../../components/ui/PillButton';
 
 const TABS = [
   { key: 'all', label: 'All' },
@@ -733,15 +735,9 @@ export default function Appointments() {
                 <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)' }}>Price</div>
                 <div style={{ fontWeight: 700, fontSize: 'var(--font-size-md)', color: 'var(--color-text)' }}>{formatCurrency(b.price)}</div>
               </div>
-              <div style={{ display: 'flex', gap: 'var(--space-4)' }}>
-                <div>
-                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)' }}>Status</div>
-                  <span className={`badge ${getStatusBadgeClass(b.status)}`}>{getStatusLabel(b.status)}</span>
-                </div>
-                <div>
-                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)' }}>Deposit</div>
-                  <span className={`badge ${getDepositBadgeClass(b.depositStatus)}`}>{getDepositLabel(b.depositStatus)}</span>
-                </div>
+              <div>
+                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)' }}>Status</div>
+                <span className={`badge ${getStatusBadgeClass(b.status)}`}>{getStatusLabel(b.status)}</span>
               </div>
               <div>
                 <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)' }}>Calendar Sync</div>
@@ -787,98 +783,122 @@ export default function Appointments() {
   // VIEW 2: Appointments Main Table View
   // =========================================================================
   return (
-    <div className="animate-fade-in-up">
+    <div className="animate-fade-in-up" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header */}
-      <div className="section-header" style={{ marginBottom: 'var(--space-4)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1 className="page-title">Appointments</h1>
-          <p className="page-subtitle">Manage all your bookings in one place.</p>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 800, margin: 0, color: 'var(--color-text)' }}>
+            Appointments
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--theme-text-muted)', margin: '4px 0 0' }}>
+            Manage and track all your client sessions in one place.
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={openManualBookingModal}>
+        <PillButton variant="primary" onClick={openManualBookingModal}>
           + New Appointment
-        </button>
+        </PillButton>
       </div>
 
       {/* Top Summary Metrics Cards */}
-      <div className="appointments-stats-grid">
-        <div
-          className={`appointment-stat-card ${activeTab === 'upcoming' ? 'active-filter' : ''}`}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+        <StatCard
+          icon="📅"
+          label="Upcoming"
+          value={summaryMetrics.upcoming}
+          subtext="Active confirmed bookings"
+          isActive={activeTab === 'upcoming'}
           onClick={() => setActiveTab('upcoming')}
-        >
-          <div className="stat-card-header">
-            <span className="stat-card-label">Upcoming</span>
-            <div className="stat-icon-badge badge-blue">📅</div>
-          </div>
-          <div className="stat-card-value">{summaryMetrics.upcoming}</div>
-          <div className="stat-card-sub">Active confirmed bookings</div>
-        </div>
-
-        <div
-          className={`appointment-stat-card ${activeTab === 'completed' ? 'active-filter' : ''}`}
+        />
+        <StatCard
+          icon="✓"
+          label="Completed"
+          value={summaryMetrics.completed}
+          subtext="Concluded sessions"
+          isActive={activeTab === 'completed'}
           onClick={() => setActiveTab('completed')}
-        >
-          <div className="stat-card-header">
-            <span className="stat-card-label">Completed</span>
-            <div className="stat-icon-badge badge-green">✓</div>
-          </div>
-          <div className="stat-card-value">{summaryMetrics.completed}</div>
-          <div className="stat-card-sub">Concluded sessions</div>
-        </div>
-
-        <div
-          className={`appointment-stat-card ${activeTab === 'cancelled' ? 'active-filter' : ''}`}
+        />
+        <StatCard
+          icon="✕"
+          label="Cancelled"
+          value={summaryMetrics.cancelled}
+          subtext="Cancelled & late cancellations"
+          isActive={activeTab === 'cancelled'}
           onClick={() => setActiveTab('cancelled')}
-        >
-          <div className="stat-card-header">
-            <span className="stat-card-label">Cancelled</span>
-            <div className="stat-icon-badge badge-gray">✕</div>
-          </div>
-          <div className="stat-card-value">{summaryMetrics.cancelled}</div>
-          <div className="stat-card-sub">Cancelled & late cancellations</div>
-        </div>
-
-        <div
-          className={`appointment-stat-card ${activeTab === 'no-show' ? 'active-filter' : ''}`}
+        />
+        <StatCard
+          icon="🛡️"
+          label="No-shows"
+          value={summaryMetrics.noShows}
+          subtext="Missed appointments"
+          isActive={activeTab === 'no-show'}
           onClick={() => setActiveTab('no-show')}
-        >
-          <div className="stat-card-header">
-            <span className="stat-card-label">No-shows</span>
-            <div className="stat-icon-badge badge-red">🛡️</div>
-          </div>
-          <div className="stat-card-value">{summaryMetrics.noShows}</div>
-          <div className="stat-card-sub">Deposits forfeited</div>
-        </div>
+        />
       </div>
 
       {/* Toolbar: Tabs + Search + Multi-dropdown filters */}
-      <div className="appointments-toolbar-card">
+      <div style={{
+        background: 'var(--theme-bg-card)',
+        borderRadius: 'var(--radius-card)',
+        border: '1px solid var(--theme-border)',
+        padding: '18px 20px',
+        boxShadow: 'var(--shadow-card)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '14px',
+      }}>
         {/* Status Tabs */}
-        <div className="appointments-tabs">
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', borderBottom: '1px solid var(--theme-border)', paddingBottom: '14px' }}>
           {TABS.map(tab => (
             <button
               key={tab.key}
               type="button"
-              className={`tab ${activeTab === tab.key ? 'tab-active' : ''}`}
               onClick={() => setActiveTab(tab.key)}
+              style={{
+                borderRadius: 'var(--radius-pill)',
+                padding: '6px 14px',
+                border: '1px solid',
+                borderColor: activeTab === tab.key ? 'var(--color-lime)' : 'var(--theme-border)',
+                background: activeTab === tab.key ? 'var(--color-lime-soft)' : 'var(--theme-input-bg)',
+                color: activeTab === tab.key ? '#0E0E0E' : 'var(--theme-text-muted)',
+                fontWeight: activeTab === tab.key ? 700 : 500,
+                fontSize: '12.5px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all var(--transition-fast)',
+              }}
             >
               <span>{tab.label}</span>
-              <span className="tab-count-badge">{tabCounts[tab.key] || 0}</span>
+              <span style={{
+                background: activeTab === tab.key ? '#0E0E0E' : 'rgba(0,0,0,0.06)',
+                color: activeTab === tab.key ? '#FFFFFF' : 'var(--color-text)',
+                fontSize: '10px',
+                padding: '1px 6px',
+                borderRadius: '10px',
+                fontWeight: 700,
+              }}>
+                {tabCounts[tab.key] || 0}
+              </span>
             </button>
           ))}
         </div>
 
         {/* Search & Filter controls row */}
-        <div className="appointments-filter-bar">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
           {/* Search Input */}
-          <div className="appointments-search-wrapper">
-            <span className="search-icon">🔍</span>
+          <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
             <input
               type="text"
-              className="appointments-search-input"
+              className="form-input"
+              style={{ paddingLeft: '38px', height: '40px', fontSize: '13px' }}
               placeholder="Search by customer or service..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
+            <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5, pointerEvents: 'none' }}>
+              🔍
+            </span>
             {searchQuery && (
               <button
                 type="button"
@@ -894,7 +914,8 @@ export default function Appointments() {
           {/* Service Dropdown */}
           <div className="filter-select-wrapper">
             <select
-              className="filter-select"
+              className="form-input"
+              style={{ height: '40px', fontSize: '13px', padding: '6px 14px', width: 'auto', minWidth: '130px' }}
               value={filterService}
               onChange={e => setFilterService(e.target.value)}
             >
@@ -908,7 +929,8 @@ export default function Appointments() {
           {/* Status Dropdown */}
           <div className="filter-select-wrapper">
             <select
-              className="filter-select"
+              className="form-input"
+              style={{ height: '40px', fontSize: '13px', padding: '6px 14px', width: 'auto', minWidth: '130px' }}
               value={filterStatus}
               onChange={e => setFilterStatus(e.target.value)}
             >
@@ -924,7 +946,8 @@ export default function Appointments() {
           {/* Date Dropdown */}
           <div className="filter-select-wrapper">
             <select
-              className="filter-select"
+              className="form-input"
+              style={{ height: '40px', fontSize: '13px', padding: '6px 14px', width: 'auto', minWidth: '120px' }}
               value={filterDatePreset}
               onChange={e => setFilterDatePreset(e.target.value)}
             >
@@ -939,7 +962,8 @@ export default function Appointments() {
           {/* Sort By Dropdown */}
           <div className="filter-select-wrapper sort-select-wrapper">
             <select
-              className="filter-select sort-select"
+              className="form-input"
+              style={{ height: '40px', fontSize: '13px', padding: '6px 14px', width: 'auto' }}
               value={sortBy}
               onChange={e => setSortBy(e.target.value)}
             >
@@ -956,7 +980,7 @@ export default function Appointments() {
           {hasActiveFilters && (
             <button
               type="button"
-              className="btn btn-ghost btn-sm btn-clear-filters"
+              className="btn btn-ghost btn-sm"
               onClick={handleResetFilters}
             >
               Reset filters
@@ -968,56 +992,64 @@ export default function Appointments() {
       {/* Appointments List View */}
       {paginatedBookings.length > 0 ? (
         <>
-          {/* Desktop Table */}
-          <div className="appointments-table-card">
-            <div className="table-container">
-              <table className="appointments-data-table">
+          {/* Desktop Table Container (Matching Overview Today's Schedule) */}
+          <div style={{
+            background: 'var(--theme-bg-card)',
+            borderRadius: 'var(--radius-card)',
+            border: '1px solid var(--theme-border)',
+            padding: '24px',
+            boxShadow: 'var(--shadow-card)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+          }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 6px' }}>
                 <thead>
-                  <tr>
-                    <th style={{ width: '24%' }}>Customer</th>
-                    <th style={{ width: '22%' }}>Service</th>
-                    <th style={{ width: '20%' }}>Date & Time</th>
-                    <th style={{ width: '12%' }}>Amount</th>
-                    <th style={{ width: '11%' }}>Deposit</th>
-                    <th style={{ width: '11%' }}>Status</th>
-                    <th style={{ width: '48px', textAlign: 'center' }}>Actions</th>
+                  <tr style={{ color: 'var(--theme-text-muted)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 600 }}>Customer</th>
+                    <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 600 }}>Service</th>
+                    <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 600 }}>Date & Time</th>
+                    <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 600 }}>Amount</th>
+                    <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 600 }}>Status</th>
+                    <th style={{ padding: '8px 14px', textAlign: 'center', fontWeight: 600, width: '48px' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedBookings.map((b, idx) => {
                     const isNearBottom = idx >= paginatedBookings.length - 2 && paginatedBookings.length > 3;
                     return (
-                      <tr key={b.id} className="appointment-table-row">
+                      <tr key={b.id} style={{ transition: 'all var(--transition-fast)' }}>
                         {/* Customer */}
-                        <td>
+                        <td style={{ padding: '14px', fontWeight: 600 }}>
                           <div
-                            className="table-customer-name"
                             onClick={() => setSelectedBooking(b.id)}
                             title="Click to view details"
+                            style={{ cursor: 'pointer', color: 'var(--color-text)' }}
                           >
                             {b.customerName}
                           </div>
-                          <div className="table-secondary-sub">
+                          <div style={{ fontSize: '11.5px', color: 'var(--theme-text-muted)', fontWeight: 400, marginTop: 2 }}>
                             {b.customerEmail || b.customerPhone || '—'}
                           </div>
                         </td>
 
                         {/* Service */}
-                        <td>
-                          <div className="table-service-name">{b.serviceName}</div>
-                          <div className="table-secondary-sub">{b.duration} min</div>
+                        <td style={{ padding: '14px' }}>
+                          <div style={{ fontWeight: 600 }}>{b.serviceName}</div>
+                          <div style={{ fontSize: '11.5px', color: 'var(--theme-text-muted)', marginTop: 2 }}>{b.duration} min</div>
                         </td>
 
                         {/* Date & Time */}
-                        <td>
-                          <div className="table-datetime-primary">
-                            <span style={{ marginRight: 4, opacity: 0.7 }}>📅</span>
+                        <td style={{ padding: '14px' }}>
+                          <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ opacity: 0.7 }}>📅</span>
                             {formatDate(b.date)}
                           </div>
-                          <div className="table-datetime-secondary">
+                          <div style={{ fontSize: '11.5px', color: 'var(--theme-text-muted)', marginTop: 2 }}>
                             {formatTime(b.startTime)} – {formatTime(b.endTime)}
                             {b.actualEndTime && (
-                              <span style={{ marginLeft: 6, color: 'var(--color-success-700)', fontWeight: 500 }}>
+                              <span style={{ marginLeft: 6, color: '#16A34A', fontWeight: 500 }}>
                                 (wrapped {formatTime(b.actualEndTime)})
                               </span>
                             )}
@@ -1025,27 +1057,19 @@ export default function Appointments() {
                         </td>
 
                         {/* Amount */}
-                        <td>
-                          <div className="table-amount-text">{formatCurrency(b.price)}</div>
-                        </td>
-
-                        {/* Deposit */}
-                        <td>
-                          <span className={`badge ${getDepositBadgeClass(b.depositStatus)}`}>
-                            {getDepositLabel(b.depositStatus)}
-                          </span>
+                        <td style={{ padding: '14px', fontWeight: 700 }}>
+                          {formatCurrency(b.price)}
                         </td>
 
                         {/* Status */}
-                        <td>
+                        <td style={{ padding: '14px' }}>
                           <span className={`badge ${getStatusBadgeClass(b.status)}`}>
-                            <span className="badge-dot" />
                             {getStatusLabel(b.status)}
                           </span>
                         </td>
 
                         {/* Actions */}
-                        <td style={{ textAlign: 'center' }}>
+                        <td style={{ padding: '14px', textAlign: 'center' }}>
                           {renderActionsMenu(b, isNearBottom)}
                         </td>
                       </tr>
@@ -1130,15 +1154,10 @@ export default function Appointments() {
 
                   <div className="mobile-card-bottom">
                     <div className="mobile-card-price">{formatCurrency(b.price)}</div>
-                    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                      <span className={`badge ${getDepositBadgeClass(b.depositStatus)}`}>
-                        {getDepositLabel(b.depositStatus)}
-                      </span>
-                      <span className={`badge ${getStatusBadgeClass(b.status)}`}>
-                        <span className="badge-dot" />
-                        {getStatusLabel(b.status)}
-                      </span>
-                    </div>
+                    <span className={`badge ${getStatusBadgeClass(b.status)}`}>
+                      <span className="badge-dot" />
+                      {getStatusLabel(b.status)}
+                    </span>
                   </div>
                 </div>
               );
@@ -1287,18 +1306,6 @@ export default function Appointments() {
                       onChange={e => setManualForm({ ...manualForm, date: e.target.value, startTime: '' })}
                       required
                     />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Deposit Status</label>
-                    <select
-                      className="form-input"
-                      value={manualForm.depositStatus}
-                      onChange={e => setManualForm({ ...manualForm, depositStatus: e.target.value })}
-                    >
-                      <option value="paid">Deposit Paid</option>
-                      <option value="pending">Deposit Pending</option>
-                      <option value="na">No Deposit</option>
-                    </select>
                   </div>
                 </div>
 
@@ -1581,11 +1588,6 @@ export default function Appointments() {
                 <p style={{ marginBottom: 'var(--space-3)' }}>
                   Are you sure you want to cancel this appointment with <strong>{target.customerName}</strong>?
                 </p>
-                {target.depositAmount > 0 && (
-                  <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-                    The {formatCurrency(target.depositAmount)} deposit will be refunded (demo).
-                  </p>
-                )}
               </div>
               <div className="modal-footer">
                 <button className="btn btn-secondary" onClick={() => setShowCancelModal(false)}>Keep Appointment</button>
@@ -1607,16 +1609,6 @@ export default function Appointments() {
                 <p style={{ marginBottom: 'var(--space-4)' }}>
                   Are you sure you want to mark this appointment with <strong>{target.customerName}</strong> as a no-show?
                 </p>
-                {target.depositAmount > 0 && (
-                  <div style={{ padding: 'var(--space-3) var(--space-4)', background: 'var(--color-error-50)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-error-100)' }}>
-                    <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-error-700)', fontWeight: 500, marginBottom: 4 }}>
-                      🛡️ Forfeit {formatCurrency(target.depositAmount)} deposit and charge no-show fee?
-                    </p>
-                    <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-error-600)' }}>
-                      Demo payment (simulated UPI) — no real charges will be made.
-                    </p>
-                  </div>
-                )}
               </div>
               <div className="modal-footer">
                 <button className="btn btn-secondary" onClick={() => setShowNoShowModal(false)}>Cancel</button>

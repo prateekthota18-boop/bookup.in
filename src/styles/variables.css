@@ -121,7 +121,7 @@
 
 /* --- LIGHT THEME (Default) --- */
 :root, [data-theme="light"] {
-  --theme-canvas-bg: var(--color-lime);
+  --theme-canvas-bg: var(--color-surface);
   --theme-bg-page: var(--color-surface);
   --theme-bg-card: var(--color-white);
   --theme-bg-card-subtle: var(--color-surface);

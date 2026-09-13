@@ -10,6 +10,7 @@ import { DAYS_OF_WEEK, DAY_FULL_LABELS, formatTimeAmPm } from '../../utils/helpe
 import { MOCK_GCAL_BUSY_EVENTS } from '../../services/calendar/MockGoogleCalendarProvider';
 import { isSupabaseConfigured } from '../../services/supabase/supabaseClient';
 import { dbService } from '../../services/supabase/dbService';
+import PillButton from '../../components/ui/PillButton';
 
 const DAY_INDEX_NAMES = {
   1: 'Mondays',
@@ -59,130 +60,281 @@ export default function Availability() {
   };
 
   return (
-    <div className="animate-fade-in-up">
-      <div className="section-header">
+    <div className="animate-fade-in-up" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Action Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1 className="page-title">Availability</h1>
-          <p className="page-subtitle">Set when clients can book appointments with you.</p>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
+            Weekly Hours & Rules
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--theme-text-muted)', margin: '3px 0 0' }}>
+            Set when clients can book appointments with you.
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={handleSave}>Save Changes</button>
+        <PillButton variant="primary" size="md" onClick={handleSave}>
+          Save Changes
+        </PillButton>
       </div>
 
-      {/* Weekly Schedule */}
-      <div className="card card-padding" style={{ marginBottom: 'var(--space-6)' }}>
-        <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, marginBottom: 'var(--space-5)' }}>Weekly Schedule</h4>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          {DAYS_OF_WEEK.map(day => (
-            <div
-              key={day}
-              className="schedule-day-row"
-            >
-              <label className="schedule-day-label">
-                <input
-                  type="checkbox"
-                  className="form-checkbox"
-                  checked={availability.schedule[day]?.available || false}
-                  onChange={e => updateDay(day, 'available', e.target.checked)}
-                />
-                <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>{DAY_FULL_LABELS[day]}</span>
-              </label>
-              {availability.schedule[day]?.available ? (
-                <div className="schedule-time-range">
+      {/* Weekly Schedule Card */}
+      <div
+        className="card"
+        style={{
+          borderRadius: 'var(--radius-card)',
+          background: 'var(--theme-bg-card)',
+          border: '1px solid var(--theme-border)',
+          boxShadow: 'var(--shadow-card)',
+          padding: '24px 28px',
+        }}
+      >
+        <div style={{ marginBottom: '18px' }}>
+          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', fontWeight: 700, margin: '0 0 4px', color: 'var(--color-text)' }}>
+            Working Days & Hours
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--theme-text-muted)', margin: 0 }}>
+            Toggle active days and define your working window for client booking.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {DAYS_OF_WEEK.map(day => {
+            const isAvailable = availability.schedule[day]?.available || false;
+            return (
+              <div
+                key={day}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 18px',
+                  borderRadius: 'var(--radius-lg)',
+                  background: isAvailable ? 'var(--theme-bg-card-subtle)' : 'transparent',
+                  border: '1px solid var(--theme-border)',
+                  transition: 'all var(--transition-fast)',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                }}
+              >
+                <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', minWidth: '150px' }}>
                   <input
-                    type="time"
-                    className="form-input schedule-time-input"
-                    value={availability.schedule[day]?.start || '09:00'}
-                    onChange={e => updateDay(day, 'start', e.target.value)}
+                    type="checkbox"
+                    checked={isAvailable}
+                    onChange={e => updateDay(day, 'available', e.target.checked)}
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      accentColor: '#0E0E0E',
+                      cursor: 'pointer',
+                    }}
                   />
-                  <span style={{ color: 'var(--color-text-tertiary)' }}>to</span>
-                  <input
-                    type="time"
-                    className="form-input schedule-time-input"
-                    value={availability.schedule[day]?.end || '18:00'}
-                    onChange={e => updateDay(day, 'end', e.target.value)}
-                  />
-                </div>
-              ) : (
-                <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
-                  Unavailable
-                </span>
-              )}
-            </div>
-          ))}
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '14px', fontWeight: isAvailable ? 700 : 500, color: 'var(--color-text)' }}>
+                    {DAY_FULL_LABELS[day]}
+                  </span>
+                </label>
+
+                {isAvailable ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <input
+                      type="time"
+                      value={availability.schedule[day]?.start || '09:00'}
+                      onChange={e => updateDay(day, 'start', e.target.value)}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--theme-border)',
+                        background: 'var(--theme-bg-card)',
+                        fontFamily: 'var(--font-family-mono)',
+                        fontSize: '13px',
+                        color: 'var(--color-text)',
+                      }}
+                    />
+                    <span style={{ color: 'var(--theme-text-muted)', fontSize: '13px' }}>to</span>
+                    <input
+                      type="time"
+                      value={availability.schedule[day]?.end || '18:00'}
+                      onChange={e => updateDay(day, 'end', e.target.value)}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--theme-border)',
+                        background: 'var(--theme-bg-card)',
+                        fontFamily: 'var(--font-family-mono)',
+                        fontSize: '13px',
+                        color: 'var(--color-text)',
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <span style={{
+                    padding: '4px 12px',
+                    borderRadius: 'var(--radius-pill)',
+                    background: 'var(--theme-input-bg)',
+                    color: 'var(--theme-text-muted)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                  }}>
+                    Unavailable
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Scheduling Settings */}
-      <div className="card card-padding" style={{ marginBottom: 'var(--space-6)' }}>
-        <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, marginBottom: 'var(--space-5)' }}>Scheduling Settings</h4>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-6)' }}>
-          <div className="form-group">
-            <label className="form-label">Buffer time</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+      {/* Scheduling Rules Card */}
+      <div
+        className="card"
+        style={{
+          borderRadius: 'var(--radius-card)',
+          background: 'var(--theme-bg-card)',
+          border: '1px solid var(--theme-border)',
+          boxShadow: 'var(--shadow-card)',
+          padding: '24px 28px',
+        }}
+      >
+        <div style={{ marginBottom: '18px' }}>
+          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', fontWeight: 700, margin: '0 0 4px', color: 'var(--color-text)' }}>
+            Buffer & Advance Booking Rules
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--theme-text-muted)', margin: 0 }}>
+            Fine-tune the dynamic slot calculation engine.
+          </p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
+              Buffer between bookings
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <input
                 type="number"
-                className="form-input"
-                style={{ width: 100 }}
                 min="0"
                 step="5"
                 value={availability.bufferTime ?? 0}
                 onChange={e => updateSetting('bufferTime', Number(e.target.value))}
+                style={{
+                  width: '100px',
+                  padding: '8px 12px',
+                  borderRadius: '12px',
+                  border: '1px solid var(--theme-border)',
+                  background: 'var(--theme-bg-card-subtle)',
+                  color: 'var(--color-text)',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                }}
               />
-              <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>minutes</span>
+              <span style={{ fontSize: '13px', color: 'var(--theme-text-muted)' }}>minutes</span>
             </div>
-            <span className="form-hint">Applied immediately to all future slot generation</span>
+            <span style={{ fontSize: '11px', color: 'var(--theme-text-muted)' }}>
+              Time padding added automatically between sessions
+            </span>
           </div>
-          <div className="form-group">
-            <label className="form-label">Minimum notice</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
+              Minimum advance notice
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <input
                 type="number"
-                className="form-input"
-                style={{ width: 100 }}
                 min="0"
                 value={availability.minNotice ?? 0}
                 onChange={e => updateSetting('minNotice', Number(e.target.value))}
+                style={{
+                  width: '100px',
+                  padding: '8px 12px',
+                  borderRadius: '12px',
+                  border: '1px solid var(--theme-border)',
+                  background: 'var(--theme-bg-card-subtle)',
+                  color: 'var(--color-text)',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                }}
               />
-              <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>hours</span>
+              <span style={{ fontSize: '13px', color: 'var(--theme-text-muted)' }}>hours</span>
             </div>
-            <span className="form-hint">Prevents clients from booking too close to now</span>
+            <span style={{ fontSize: '11px', color: 'var(--theme-text-muted)' }}>
+              Prevents clients from booking too close to start time
+            </span>
           </div>
-          <div className="form-group">
-            <label className="form-label">Max advance booking</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
+              Max advance booking window
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <input
                 type="number"
-                className="form-input"
-                style={{ width: 100 }}
                 min="1"
                 value={availability.maxAdvanceBooking || 30}
                 onChange={e => updateSetting('maxAdvanceBooking', Number(e.target.value))}
+                style={{
+                  width: '100px',
+                  padding: '8px 12px',
+                  borderRadius: '12px',
+                  border: '1px solid var(--theme-border)',
+                  background: 'var(--theme-bg-card-subtle)',
+                  color: 'var(--color-text)',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                }}
               />
-              <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>days</span>
+              <span style={{ fontSize: '13px', color: 'var(--theme-text-muted)' }}>days</span>
             </div>
-            <span className="form-hint">How far ahead clients can book</span>
+            <span style={{ fontSize: '11px', color: 'var(--theme-text-muted)' }}>
+              How far into the future clients can book
+            </span>
           </div>
         </div>
       </div>
 
       {/* Busy Times from Google Calendar */}
-      <div className="card card-padding">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <span style={{ fontSize: '1.25rem' }}>📅</span>
-            <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, margin: 0 }}>Google Calendar Busy Times</h4>
+      <div
+        className="card"
+        style={{
+          borderRadius: 'var(--radius-card)',
+          background: 'var(--theme-bg-card)',
+          border: '1px solid var(--theme-border)',
+          boxShadow: 'var(--shadow-card)',
+          padding: '24px 28px',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '1.3rem' }}>📅</span>
+            <div>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
+                Google Calendar Busy Times
+              </h3>
+              <p style={{ fontSize: '12px', color: 'var(--theme-text-muted)', margin: 0 }}>
+                Two-way calendar sync automatically blocks candidate booking slots.
+              </p>
+            </div>
           </div>
           {gcal.isConnected && (
-            <span className="badge badge-active">Active in Slot Engine</span>
+            <span
+              style={{
+                padding: '4px 12px',
+                borderRadius: 'var(--radius-pill)',
+                background: 'var(--color-lime-soft)',
+                color: '#2B3505',
+                fontSize: '12px',
+                fontWeight: 700,
+              }}
+            >
+              ✓ Active in Slot Engine
+            </span>
           )}
         </div>
 
         {gcal.isConnected ? (
           <div>
-            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-4)' }}>
-              The following events from <strong>{gcal.email}</strong> automatically block candidate slots on your booking page:
+            <p style={{ fontSize: '13px', color: 'var(--theme-text-muted)', marginBottom: '14px' }}>
+              Events from <strong>{gcal.email}</strong> automatically block candidate slots on your booking page:
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {MOCK_GCAL_BUSY_EVENTS.map((event, idx) => (
                 <div
                   key={idx}
@@ -190,19 +342,26 @@ export default function Availability() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: 'var(--space-3) var(--space-4)',
-                    background: 'var(--color-gray-50)',
-                    border: '1px solid var(--color-border)',
+                    padding: '12px 16px',
+                    background: 'var(--theme-bg-card-subtle)',
+                    border: '1px solid var(--theme-border)',
                     borderRadius: 'var(--radius-md)',
                   }}
                 >
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)' }}>{event.title}</div>
-                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '13px', color: 'var(--color-text)' }}>{event.title}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--theme-text-muted)' }}>
                       Every {DAY_INDEX_NAMES[event.dayOfWeek]} · {formatTimeAmPm(event.start)} – {formatTimeAmPm(event.end)}
                     </div>
                   </div>
-                  <span className="badge badge-inactive" style={{ fontSize: 'var(--font-size-xs)' }}>
+                  <span style={{
+                    padding: '3px 10px',
+                    borderRadius: 'var(--radius-pill)',
+                    background: 'var(--theme-input-bg)',
+                    color: 'var(--theme-text-muted)',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                  }}>
                     🚫 Slot Blocked
                   </span>
                 </div>
@@ -210,14 +369,14 @@ export default function Availability() {
             </div>
           </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
-            <div>
-              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', margin: 0 }}>
-                Google Calendar is currently disconnected. Connect in Settings to auto-block personal meetings and commitments.
-              </p>
-            </div>
-            <Link to="/dashboard/settings" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
-              Connect in Settings →
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', padding: '12px 0 0' }}>
+            <p style={{ fontSize: '13px', color: 'var(--theme-text-muted)', margin: 0 }}>
+              Google Calendar is currently disconnected. Connect in Settings to auto-block personal meetings and commitments.
+            </p>
+            <Link to="/dashboard/settings" style={{ textDecoration: 'none' }}>
+              <PillButton variant="secondary" size="sm" arrow>
+                Connect in Settings
+              </PillButton>
             </Link>
           </div>
         )}
@@ -225,3 +384,4 @@ export default function Availability() {
     </div>
   );
 }
+
