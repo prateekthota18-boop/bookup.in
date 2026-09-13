@@ -3,7 +3,7 @@
  * Profile, Profile Completeness, Google Calendar, WhatsApp Reminders, and Account
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../../data/store';
 import { ACTIONS } from '../../data/actions';
@@ -26,6 +26,9 @@ export default function Settings() {
   const [bio, setBio] = useState(provider.bio || '');
   const [email, setEmail] = useState(provider.email || '');
   const [phone, setPhone] = useState(provider.phone || '');
+  const [avatar, setAvatar] = useState(provider.avatar || provider.avatarUrl || null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef(null);
   const [bioError, setBioError] = useState('');
   const [isConnectingGcal, setIsConnectingGcal] = useState(false);
 
@@ -37,6 +40,9 @@ export default function Settings() {
       if (state.provider.bio && !bio) setBio(state.provider.bio);
       if (state.provider.email && !email) setEmail(state.provider.email);
       if (state.provider.phone && !phone) setPhone(state.provider.phone);
+      if ((state.provider.avatar || state.provider.avatarUrl) && !avatar) {
+        setAvatar(state.provider.avatar || state.provider.avatarUrl);
+      }
     }
   }, [state.provider]);
 
@@ -92,6 +98,51 @@ export default function Settings() {
   if (!hasBiz) completenessNudges.push('Add your studio or business name');
   if (!hasContact) completenessNudges.push('Complete your email & phone contact info');
   if (!hasServices) completenessNudges.push('Add at least one active service');
+
+  const handleAvatarFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      addToast('Profile image must be under 5MB.', 'error');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const url = await dbService.uploadAvatar(provider.id, file);
+      if (url) {
+        setAvatar(url);
+        dispatch({
+          type: ACTIONS.UPDATE_PROVIDER,
+          payload: { avatar: url, avatarUrl: url },
+        });
+
+        if (isSupabaseConfigured() && provider.id) {
+          await dbService.updateProviderProfile(provider.id, { avatarUrl: url });
+        }
+        addToast('Profile photo updated ✓');
+      }
+    } catch (err) {
+      console.error('Failed to upload avatar:', err);
+      addToast(err.message || 'Failed to upload image.', 'error');
+    } finally {
+      setUploadingAvatar(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setAvatar(null);
+    dispatch({
+      type: ACTIONS.UPDATE_PROVIDER,
+      payload: { avatar: null, avatarUrl: null },
+    });
+    if (isSupabaseConfigured() && provider.id) {
+      await dbService.updateProviderProfile(provider.id, { avatarUrl: null });
+    }
+    addToast('Profile photo removed.');
+  };
 
   const handleSaveProfile = async () => {
     if (bio.trim().length > 0 && bio.trim().length < 20) {
@@ -240,11 +291,63 @@ export default function Settings() {
       <div className="card card-padding" style={{ marginBottom: 'var(--space-6)' }}>
         <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, marginBottom: 'var(--space-5)' }}>Profile</h4>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
-          <div className="avatar avatar-xl">{getInitials(name)}</div>
-          <div>
-            <div style={{ fontWeight: 500 }}>{name || 'Your Name'}</div>
-            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>{businessName || 'Your Business'}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', marginBottom: 'var(--space-6)', flexWrap: 'wrap' }}>
+          <div
+            className="avatar avatar-xl"
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: '50%',
+              overflow: 'hidden',
+              background: 'var(--theme-input-bg)',
+              border: '2px solid var(--color-lime)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 800,
+              fontSize: '22px',
+              color: 'var(--color-text)',
+              flexShrink: 0,
+            }}
+          >
+            {avatar ? (
+              <img src={avatar} alt={name || 'Coach'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              getInitials(name)
+            )}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <input
+                type="file"
+                ref={avatarInputRef}
+                accept="image/png,image/jpeg,image/webp"
+                style={{ display: 'none' }}
+                onChange={handleAvatarFileSelect}
+              />
+              <PillButton
+                variant="primary"
+                size="sm"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={uploadingAvatar}
+              >
+                {uploadingAvatar ? 'Uploading...' : (avatar ? 'Change Photo' : 'Upload Photo')}
+              </PillButton>
+              {avatar && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={handleRemoveAvatar}
+                  style={{ fontSize: '12px', color: '#EF4444' }}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            <span style={{ fontSize: '11.5px', color: 'var(--theme-text-muted)' }}>
+              JPG, PNG, or WebP up to 5MB.
+            </span>
           </div>
         </div>
 
@@ -324,8 +427,8 @@ export default function Settings() {
                   gap: '8px',
                   padding: '8px 16px',
                   borderRadius: 'var(--radius-pill)',
-                  background: 'var(--color-lime-soft)',
-                  color: '#243003',
+                  background: 'var(--theme-badge-bg)',
+                  color: 'var(--theme-badge-text)',
                   fontWeight: 600,
                   fontSize: '13px',
                 }}

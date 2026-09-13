@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useStore } from '../data/store';
 import { ACTIONS } from '../data/actions';
-import { useTheme } from '../context/ThemeContext';
 import BrandLogo from '../components/ui/BrandLogo';
 import PillButton from '../components/ui/PillButton';
 import './Landing.css';
@@ -60,11 +59,10 @@ const ARTICLES = [
 export default function Landing() {
   const navigate = useNavigate();
   const { dispatch } = useStore();
-  const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState('features');
 
   const handleStartTrial = () => {
-    dispatch({ type: ACTIONS.SET_DEMO_MODE, payload: true });
+    dispatch({ type: ACTIONS.ENTER_DEMO });
     navigate('/dashboard');
   };
 
@@ -465,13 +463,6 @@ export default function Landing() {
               <a href="#testimonials">Reviews</a>
               <a href="#articles">Blog</a>
               <a href="mailto:support@bookup.work.gd">Contact Support</a>
-            </div>
-
-            <div className="footer-theme-col">
-              <h4>Theme Preference</h4>
-              <button className="footer-theme-toggle" onClick={toggleTheme}>
-                {theme === 'dark' ? '☀️ Switch to Light Mode' : '🌙 Switch to Dark Mode'}
-              </button>
             </div>
           </div>
 

@@ -9,6 +9,7 @@ import {
   isPastDate,
   isFutureDate,
   getTimeSlotsDetailedForDate,
+  getInitials,
 } from '../../utils/helpers';
 import {
   generateManagementToken,
@@ -367,7 +368,7 @@ export default function PublicBookingPage() {
       <div className="janjiyuk-phone-card animate-scale-in">
         {/* Card Header with Provider Name + Back Chevron */}
         <header className="booking-card-header">
-          <div className="header-left">
+          <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {currentStep > 1 && (
               <button
                 type="button"
@@ -378,6 +379,29 @@ export default function PublicBookingPage() {
                 ‹
               </button>
             )}
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: '50%',
+                overflow: 'hidden',
+                background: '#252525',
+                color: '#FFFFFF',
+                border: '2px solid var(--color-lime)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: '13px',
+                flexShrink: 0,
+              }}
+            >
+              {provider?.avatar || provider?.avatarUrl ? (
+                <img src={provider.avatar || provider.avatarUrl} alt={provider.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                getInitials(provider?.name || 'User')
+              )}
+            </div>
             <div>
               <h2 className="header-provider-name">
                 {provider.businessName || provider.name}

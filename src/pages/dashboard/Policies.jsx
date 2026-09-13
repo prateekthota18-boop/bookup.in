@@ -58,21 +58,7 @@ export default function Policies() {
       </div>
 
       {/* Feature Preview Notice Banner */}
-      <div
-        style={{
-          background: 'var(--color-lime-soft)',
-          color: '#2B3505',
-          border: '1px solid var(--color-lime)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '16px 20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          marginBottom: 'var(--space-6)',
-          fontWeight: 500,
-          fontSize: '14px',
-        }}
-      >
+      <div className="policy-notice-banner">
         <span style={{ fontSize: '20px' }}>💳</span>
         <div>
           <strong>Payment collection coming soon</strong> — Online deposit collection via Razorpay will be enabled in an upcoming release. Configure your policy rules below in advance.
@@ -140,22 +126,12 @@ export default function Policies() {
             <div style={{ padding: 'var(--space-4) var(--space-5)', borderBottom: '1px solid var(--color-border)', fontSize: 'var(--font-size-md)', fontWeight: 600 }}>
               Policy Preview
             </div>
-            <div style={{ padding: 'var(--space-5)' }}>
-              <div style={{
-                display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)',
-                padding: 'var(--space-3) var(--space-4)', background: 'var(--color-success-50)',
-                borderRadius: 'var(--radius-lg)', marginBottom: 'var(--space-3)',
-                fontSize: 'var(--font-size-sm)', color: 'var(--color-success-700)',
-              }}>
+            <div style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="policy-preview-banner policy-banner-success">
                 <span>✅</span>
                 <span>Cancel more than <strong>{policies.cancellationWindow} hours</strong> before your appointment: <strong>full deposit refund</strong></span>
               </div>
-              <div style={{
-                display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)',
-                padding: 'var(--space-3) var(--space-4)', background: 'var(--color-error-50)',
-                borderRadius: 'var(--radius-lg)',
-                fontSize: 'var(--font-size-sm)', color: 'var(--color-error-700)',
-              }}>
+              <div className="policy-preview-banner policy-banner-warning">
                 <span>⚠️</span>
                 <span>Late cancellation or no-show: <strong>deposit forfeited ({formatCurrency(policies.depositAmount)})</strong></span>
               </div>

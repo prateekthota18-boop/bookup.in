@@ -3,7 +3,7 @@
  * 8-step wizard for new providers
  */
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useStore, generateId, formatCurrency } from '../data/store';
 import { ACTIONS } from '../data/actions';
@@ -32,6 +32,9 @@ export default function Onboarding() {
   const [businessName, setBusinessName] = useState('');
   const [providerName, setProviderName] = useState(state.provider?.name || '');
   const [bio, setBio] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState(state.provider?.avatar || state.provider?.avatarUrl || null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef(null);
   const [service, setService] = useState({ name: '', description: '', price: 1000, duration: 60, depositAmount: 200 });
   const [availability, setAvailability] = useState(defaultAvailability);
   const [bookingRules, setBookingRules] = useState({ minNotice: 2, maxAdvanceBooking: 30, bufferTime: 15, cancellationWindow: 12 });
@@ -41,6 +44,35 @@ export default function Onboarding() {
   const [stepError, setStepError] = useState('');
 
   const slug = generateSlug(providerName || businessName || 'my-page');
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      addToast('Profile image must be under 5MB.', 'error');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const url = await dbService.uploadAvatar(state.provider?.id, file);
+      if (url) {
+        setAvatarUrl(url);
+        dispatch({
+          type: ACTIONS.UPDATE_PROVIDER,
+          payload: { avatar: url, avatarUrl: url },
+        });
+        addToast('Profile photo added ✓');
+      }
+    } catch (err) {
+      console.error('Failed to upload avatar in onboarding:', err);
+      addToast(err.message || 'Failed to upload photo.', 'error');
+    } finally {
+      setUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const nextStep = () => {
     setStepError('');
@@ -98,6 +130,7 @@ export default function Onboarding() {
             bufferTime: bookingRules.bufferTime,
             minNotice: bookingRules.minNotice,
             maxAdvanceBooking: bookingRules.maxAdvanceBooking,
+            avatarUrl,
           });
         } else {
           const newProv = await dbService.createProviderProfile({
@@ -250,8 +283,48 @@ export default function Onboarding() {
             <h2>Tell clients about yourself</h2>
             <p>A short bio that appears on your booking page.</p>
             <div className="onb-avatar-section">
-              <div className="avatar avatar-xl">{getInitials(providerName)}</div>
-              <span className="onb-avatar-hint">Avatar based on your initials</span>
+              <div
+                className="avatar avatar-xl"
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  background: 'var(--theme-input-bg)',
+                  border: '2px solid var(--color-lime)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 800,
+                  fontSize: '22px',
+                  color: 'var(--color-text)',
+                  margin: '0 auto',
+                }}
+              >
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt={providerName || 'Coach'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  getInitials(providerName)
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/png,image/jpeg,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={handleAvatarUpload}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                >
+                  {uploadingAvatar ? 'Uploading...' : (avatarUrl ? 'Change Photo' : 'Upload Profile Photo')}
+                </button>
+                <span className="onb-avatar-hint">JPG, PNG, or WebP up to 5MB</span>
+              </div>
             </div>
             <div className="form-group">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>

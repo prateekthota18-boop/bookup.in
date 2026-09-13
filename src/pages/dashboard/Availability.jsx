@@ -318,8 +318,8 @@ export default function Availability() {
               style={{
                 padding: '4px 12px',
                 borderRadius: 'var(--radius-pill)',
-                background: 'var(--color-lime-soft)',
-                color: '#2B3505',
+                background: 'var(--theme-badge-bg)',
+                color: 'var(--theme-badge-text)',
                 fontSize: '12px',
                 fontWeight: 700,
               }}

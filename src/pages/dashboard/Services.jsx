@@ -206,8 +206,8 @@ export default function Services() {
                       borderRadius: 'var(--radius-pill)',
                       fontSize: '11px',
                       fontWeight: 700,
-                      background: service.isActive ? 'var(--color-lime-soft)' : 'var(--theme-input-bg)',
-                      color: service.isActive ? '#2B3505' : 'var(--theme-text-muted)',
+                      background: service.isActive ? 'var(--theme-badge-bg)' : 'var(--theme-input-bg)',
+                      color: service.isActive ? 'var(--theme-badge-text)' : 'var(--theme-text-muted)',
                       letterSpacing: '0.02em',
                       textTransform: 'uppercase',
                     }}

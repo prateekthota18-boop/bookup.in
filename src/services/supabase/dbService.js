@@ -39,6 +39,8 @@ export const dbService = {
       bufferTime: data.buffer_time ?? 15,
       minNotice: data.min_notice ?? 2,
       maxAdvanceBooking: data.max_advance_booking ?? 30,
+      avatar: data.avatar_url || data.avatar || null,
+      avatarUrl: data.avatar_url || data.avatar || null,
       createdAt: data.created_at,
     };
   },
@@ -69,6 +71,8 @@ export const dbService = {
       bufferTime: data.buffer_time ?? 15,
       minNotice: data.min_notice ?? 2,
       maxAdvanceBooking: data.max_advance_booking ?? 30,
+      avatar: data.avatar_url || data.avatar || null,
+      avatarUrl: data.avatar_url || data.avatar || null,
       createdAt: data.created_at,
     };
   },
@@ -193,6 +197,8 @@ export const dbService = {
     if (fields.bufferTime !== undefined) updatePayload.buffer_time = fields.bufferTime;
     if (fields.minNotice !== undefined) updatePayload.min_notice = fields.minNotice;
     if (fields.maxAdvanceBooking !== undefined) updatePayload.max_advance_booking = fields.maxAdvanceBooking;
+    if (fields.avatarUrl !== undefined) updatePayload.avatar_url = fields.avatarUrl;
+    if (fields.avatar !== undefined && fields.avatarUrl === undefined) updatePayload.avatar_url = fields.avatar;
 
     const { error } = await supabase
       .from('providers')
@@ -205,6 +211,50 @@ export const dbService = {
     }
 
     return true;
+  },
+
+  async uploadAvatar(providerId, file) {
+    if (!file) return null;
+
+    // Validate size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error('Image must be under 5MB.');
+    }
+
+    // Validate type
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!validTypes.includes(file.type)) {
+      throw new Error('Only JPG, PNG, or WebP images are supported.');
+    }
+
+    // Attempt Supabase storage upload if configured
+    if (isSupabaseConfigured()) {
+      try {
+        const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
+        const fileName = `${providerId || 'coach'}-${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(fileName, file, { upsert: true, contentType: file.type });
+
+        if (!uploadError) {
+          const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
+          if (data?.publicUrl) {
+            return data.publicUrl;
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase storage upload failed, using local DataURL fallback:', err);
+      }
+    }
+
+    // Fallback to Data URL (for demo mode / offline support)
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   },
 
   // ===========================================================================

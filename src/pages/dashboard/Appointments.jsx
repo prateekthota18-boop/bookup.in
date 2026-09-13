@@ -800,7 +800,7 @@ export default function Appointments() {
       </div>
 
       {/* Top Summary Metrics Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+      <div className="appointments-metrics-grid">
         <StatCard
           icon="📅"
           label="Upcoming"
@@ -887,7 +887,7 @@ export default function Appointments() {
         {/* Search & Filter controls row */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
           {/* Search Input */}
-          <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+          <div style={{ position: 'relative', flex: '1 1 100%', minWidth: '160px', width: '100%' }}>
             <input
               type="text"
               className="form-input"
@@ -993,7 +993,7 @@ export default function Appointments() {
       {paginatedBookings.length > 0 ? (
         <>
           {/* Desktop Table Container (Matching Overview Today's Schedule) */}
-          <div style={{
+          <div className="appointments-desktop-table" style={{
             background: 'var(--theme-bg-card)',
             borderRadius: 'var(--radius-card)',
             border: '1px solid var(--theme-border)',
@@ -1019,7 +1019,7 @@ export default function Appointments() {
                   {paginatedBookings.map((b, idx) => {
                     const isNearBottom = idx >= paginatedBookings.length - 2 && paginatedBookings.length > 3;
                     return (
-                      <tr key={b.id} style={{ transition: 'all var(--transition-fast)' }}>
+                      <tr key={b.id} className={idx % 2 === 1 ? 'highlighted-lime' : ''} style={{ transition: 'all var(--transition-fast)' }}>
                         {/* Customer */}
                         <td style={{ padding: '14px', fontWeight: 600 }}>
                           <div

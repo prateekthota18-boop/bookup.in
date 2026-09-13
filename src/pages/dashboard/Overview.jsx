@@ -51,15 +51,15 @@ export default function Overview() {
   const todayFormatted = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long' });
 
   return (
-    <div className="overview-layout-grid animate-fade-in-up" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '28px' }}>
+    <div className="overview-layout-grid animate-fade-in-up">
       {/* Left Column: Quick Stats + Today's Schedule */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', minWidth: 0, width: '100%' }}>
         {/* Quick Stats Header + 3 Stat Cards */}
         <div>
           <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '14px', color: 'var(--color-text)' }}>
             Quick Stats
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+          <div className="overview-quick-stats-grid">
             <StatCard
               label="Bookings Today"
               value={totalToday}
@@ -85,19 +85,7 @@ export default function Overview() {
         {/* Today's Schedule (Image 1) */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           {/* Header Bar: Dark Pill Header matching Image 1 */}
-          <div
-            style={{
-              background: '#0E0E0E',
-              color: '#FFFFFF',
-              padding: '16px 20px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              borderRadius: '24px 24px 0 0',
-              flexWrap: 'wrap',
-              gap: '10px',
-            }}
-          >
+          <div className="schedule-card-header-bar">
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '16px' }}>
                 Today's Schedule
@@ -132,9 +120,10 @@ export default function Overview() {
             </div>
           </div>
 
-          {/* Schedule Table */}
+          {/* Schedule Table (Desktop) & Cards (Mobile) */}
           <div style={{ padding: '16px 18px' }}>
-            <div className="table-container">
+            {/* Desktop Table */}
+            <div className="table-container schedule-desktop-table">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -163,12 +152,42 @@ export default function Overview() {
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile Stacked Cards */}
+            <div className="schedule-mobile-cards">
+              {tableRows.map((row, idx) => (
+                <div key={idx} className="schedule-card-mobile">
+                  <div className="schedule-card-mobile-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flexWrap: 'wrap' }}>
+                      <span className="schedule-card-time-pill">{row.time}</span>
+                      <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--color-text)', wordBreak: 'break-word' }}>
+                        {row.customer}
+                      </span>
+                    </div>
+                    <span className="pill-contact" style={{ fontSize: '11px', flexShrink: 0 }}>
+                      <span style={{ color: '#22C55E' }}>●</span>
+                      {row.contact}
+                    </span>
+                  </div>
+                  <div className="schedule-card-mobile-body">
+                    <div className="schedule-card-field">
+                      <span className="field-label">Service</span>
+                      <span className="field-value">{row.service}</span>
+                    </div>
+                    <div className="schedule-card-field" style={{ textAlign: 'right' }}>
+                      <span className="field-label">Staff</span>
+                      <span className="field-value">{row.staff}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Right Column: Month Calendar Widget + Weekly Bookings Chart */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', minWidth: 0, width: '100%' }}>
         {/* Lime Calendar Widget */}
         <CalendarWidget
           selectedDate={selectedCalendarDate}

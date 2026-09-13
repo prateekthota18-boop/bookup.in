@@ -166,8 +166,8 @@ export default function BookingPageManagement() {
           <span style={{
             padding: '4px 12px',
             borderRadius: 'var(--radius-pill)',
-            background: 'var(--color-lime-soft)',
-            color: '#2B3505',
+            background: 'var(--theme-badge-bg)',
+            color: 'var(--theme-badge-text)',
             fontSize: '11px',
             fontWeight: 700,
             letterSpacing: '0.02em',
@@ -207,8 +207,8 @@ export default function BookingPageManagement() {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{
-                  width: '32px',
-                  height: '32px',
+                  width: '34px',
+                  height: '34px',
                   borderRadius: '50%',
                   background: 'var(--theme-input-bg)',
                   display: 'flex',
@@ -216,8 +216,15 @@ export default function BookingPageManagement() {
                   justifyContent: 'center',
                   fontWeight: 700,
                   fontSize: '13px',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                  border: '1.5px solid var(--color-lime)',
                 }}>
-                  {getInitials(provider?.name || 'U')}
+                  {provider?.avatar || provider?.avatarUrl ? (
+                    <img src={provider.avatar || provider.avatarUrl} alt={provider?.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    getInitials(provider?.name || 'U')
+                  )}
                 </div>
                 <div>
                   <div style={{ fontFamily: 'var(--font-heading)', fontSize: '14px', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>

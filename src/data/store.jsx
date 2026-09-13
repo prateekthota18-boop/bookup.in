@@ -257,6 +257,18 @@ const StoreContext = createContext(null);
 export function StoreProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState, () => {
     try {
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('demo') === '1' || urlParams.get('demo') === 'true') {
+          const seed = createSeedState();
+          return {
+            ...seed,
+            auth: { isAuthenticated: true, isDemoMode: true, user: seed.provider, loading: false },
+            onboarding: { completed: true, currentStep: 8 },
+            toasts: []
+          };
+        }
+      }
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);

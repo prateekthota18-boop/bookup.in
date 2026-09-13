@@ -4,7 +4,6 @@ import { useStore, useAuth } from '../data/store';
 import { ACTIONS } from '../data/actions';
 import { getInitials } from '../utils/helpers';
 import { supabase, isSupabaseConfigured } from '../services/supabase/supabaseClient';
-import { useTheme } from '../context/ThemeContext';
 import BrandLogo from '../components/ui/BrandLogo';
 import './DashboardLayout.css';
 
@@ -91,6 +90,16 @@ const ICONS = {
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
     </svg>
   ),
+  menu: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  ),
+  close: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  ),
 };
 
 export default function DashboardLayout() {
@@ -98,8 +107,8 @@ export default function DashboardLayout() {
   const auth = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { theme, toggleTheme } = useTheme();
   const provider = state.provider;
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   const [timeStr, setTimeStr] = useState(() => {
     const now = new Date();
@@ -113,6 +122,11 @@ export default function DashboardLayout() {
     }, 30000);
     return () => clearInterval(timer);
   }, []);
+
+  // Close mobile drawer on route navigation
+  useEffect(() => {
+    setMobileDrawerOpen(false);
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     if (isSupabaseConfigured()) {
@@ -135,8 +149,8 @@ export default function DashboardLayout() {
 
   return (
     <div className="janjiyuk-dashboard-canvas">
-      {/* Detached Black Rounded Icon Sidebar (Image 1) */}
-      <aside className="janjiyuk-sidebar">
+      {/* Detached Black Rounded Icon Sidebar on Desktop */}
+      <aside className="janjiyuk-sidebar hide-mobile">
         <div className="janjiyuk-sidebar-top">
           <BrandLogo iconOnly size="sm" to="/dashboard" />
         </div>
@@ -156,16 +170,6 @@ export default function DashboardLayout() {
         </nav>
 
         <div className="janjiyuk-sidebar-bottom">
-          {/* Light/Dark Toggle Button */}
-          <button
-            type="button"
-            className="janjiyuk-sidebar-tool-btn"
-            onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-          >
-            {theme === 'dark' ? ICONS.sun : ICONS.moon}
-          </button>
-
           {/* Logout button */}
           <button
             type="button"
@@ -181,8 +185,13 @@ export default function DashboardLayout() {
             className="janjiyuk-avatar-pill"
             title={`${provider?.name || 'User'} (${provider?.email || ''})`}
             onClick={() => navigate('/dashboard/settings')}
+            style={provider?.avatar ? { overflow: 'hidden', padding: 0 } : undefined}
           >
-            {getInitials(provider?.name || 'User')}
+            {provider?.avatar ? (
+              <img src={provider.avatar} alt={provider?.name || 'Coach'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              getInitials(provider?.name || 'User')
+            )}
           </div>
         </div>
       </aside>
@@ -225,14 +234,15 @@ export default function DashboardLayout() {
               <span className="bell-badge-dot" />
             </button>
 
-            {/* Theme Toggle Icon in Topbar on Mobile */}
+            {/* Mobile Menu Hamburger Button */}
             <button
               type="button"
               className="janjiyuk-bell-btn hide-desktop"
-              onClick={toggleTheme}
-              title="Toggle theme"
+              onClick={() => setMobileDrawerOpen(true)}
+              title="Navigation menu"
+              aria-label="Open menu"
             >
-              {theme === 'dark' ? ICONS.sun : ICONS.moon}
+              {ICONS.menu}
             </button>
           </div>
         </header>
@@ -242,6 +252,122 @@ export default function DashboardLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Docked Full-Width Solid Mobile Bottom Tab Bar */}
+      <nav className="janjiyuk-mobile-bottom-bar hide-desktop">
+        <NavLink
+          to="/dashboard"
+          end
+          className={({ isActive }) => `mobile-bottom-tab ${isActive ? 'active' : ''}`}
+        >
+          <span className="tab-icon">{ICONS.grid}</span>
+          <span className="tab-label">Overview</span>
+        </NavLink>
+
+        <NavLink
+          to="/dashboard/appointments"
+          className={({ isActive }) => `mobile-bottom-tab ${isActive ? 'active' : ''}`}
+        >
+          <span className="tab-icon">{ICONS.calendar}</span>
+          <span className="tab-label">Bookings</span>
+        </NavLink>
+
+        <NavLink
+          to="/dashboard/services"
+          className={({ isActive }) => `mobile-bottom-tab ${isActive ? 'active' : ''}`}
+        >
+          <span className="tab-icon">{ICONS.briefcase}</span>
+          <span className="tab-label">Services</span>
+        </NavLink>
+
+        <NavLink
+          to="/dashboard/availability"
+          className={({ isActive }) => `mobile-bottom-tab ${isActive ? 'active' : ''}`}
+        >
+          <span className="tab-icon">{ICONS.clock}</span>
+          <span className="tab-label">Hours</span>
+        </NavLink>
+
+        <button
+          type="button"
+          className={`mobile-bottom-tab ${
+            ['/dashboard/booking-page', '/dashboard/policies', '/dashboard/analytics', '/dashboard/settings'].some(p => location.pathname.startsWith(p))
+              ? 'active'
+              : ''
+          }`}
+          onClick={() => setMobileDrawerOpen(true)}
+        >
+          <span className="tab-icon">{ICONS.menu}</span>
+          <span className="tab-label">More</span>
+        </button>
+      </nav>
+
+      {/* Slide-out Mobile Navigation Drawer */}
+      {mobileDrawerOpen && (
+        <div className="janjiyuk-mobile-drawer-overlay" onClick={() => setMobileDrawerOpen(false)}>
+          <aside className="janjiyuk-mobile-drawer" onClick={e => e.stopPropagation()}>
+            <div className="drawer-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <BrandLogo iconOnly size="sm" to="/dashboard" />
+                <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '17px', color: 'var(--color-text)' }}>
+                  bookup.
+                </span>
+              </div>
+              <button
+                type="button"
+                className="drawer-close-btn"
+                onClick={() => setMobileDrawerOpen(false)}
+                title="Close menu"
+              >
+                {ICONS.close}
+              </button>
+            </div>
+
+            <div className="drawer-user-info">
+              <div
+                className="janjiyuk-avatar-pill"
+                style={provider?.avatar ? { overflow: 'hidden', padding: 0 } : undefined}
+              >
+                {provider?.avatar ? (
+                  <img src={provider.avatar} alt={provider?.name || 'Coach'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  getInitials(provider?.name || 'User')
+                )}
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--color-text)' }}>
+                  {provider?.name || 'User'}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--theme-text-muted)' }}>
+                  {provider?.businessName || provider?.email || 'Active session'}
+                </div>
+              </div>
+            </div>
+
+            <nav className="drawer-nav-list">
+              {NAV_ITEMS.map(item => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  end={item.end}
+                  className={({ isActive }) => `drawer-nav-link ${isActive ? 'active' : ''}`}
+                  onClick={() => setMobileDrawerOpen(false)}
+                >
+                  <span className="drawer-nav-icon">{ICONS[item.icon]}</span>
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
+            </nav>
+
+            <div className="drawer-footer">
+              <button type="button" className="drawer-action-btn logout" onClick={handleLogout}>
+                <span>{ICONS.logout}</span>
+                <span>Log out</span>
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
 
       {/* Toast Container */}
       {state.toasts.length > 0 && (

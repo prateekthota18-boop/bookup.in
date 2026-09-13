@@ -69,7 +69,7 @@ export default function Analytics() {
           datasets: [{
             label: 'Revenue (₹)',
             data: analyticsData.monthlyData.map(d => d.revenue),
-            borderColor: '#243003',
+            borderColor: '#C6F135',
             backgroundColor: 'rgba(198, 241, 53, 0.25)',
             fill: true,
             tension: 0.35,

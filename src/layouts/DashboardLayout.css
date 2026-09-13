@@ -250,10 +250,32 @@
   flex: 1;
 }
 
+/* --- Utility visibility classes for responsive breakpoints --- */
+.hide-desktop {
+  display: none !important;
+}
+
+/* --- Grid container for Overview page --- */
+.overview-layout-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 28px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.overview-layout-grid > * {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 /* --- Mobile Responsive Rules --- */
 @media (max-width: 992px) {
   .overview-layout-grid {
     grid-template-columns: 1fr !important;
+    gap: 20px;
   }
   .janjiyuk-dashboard-canvas {
     padding: 10px;
@@ -266,49 +288,232 @@
 }
 
 @media (max-width: 768px) {
+  .hide-mobile {
+    display: none !important;
+  }
+  .hide-desktop {
+    display: flex !important;
+  }
+
   .janjiyuk-dashboard-canvas {
     padding: 0;
+    margin: 0;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
     flex-direction: column;
+    min-height: 100vh;
+    box-sizing: border-box;
   }
 
   .janjiyuk-workspace-frame {
     border-radius: 0;
     min-height: 100vh;
-    padding: 20px 16px 96px;
+    padding: 16px 12px 84px !important;
     box-shadow: none;
+    gap: 18px;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+    box-sizing: border-box;
   }
 
-  /* Fixed Bottom Tab Bar on Mobile */
-  .janjiyuk-sidebar {
+  .janjiyuk-page-title {
+    font-size: 1.45rem;
+  }
+
+  .janjiyuk-page-sub {
+    font-size: 12px;
+  }
+
+  /* Docked Solid Full-Width Mobile Bottom Tab Bar */
+  .janjiyuk-mobile-bottom-bar {
     position: fixed;
-    top: auto;
-    bottom: 12px;
-    left: 16px;
-    right: 16px;
-    width: auto;
-    height: 58px;
-    border-radius: var(--radius-pill);
-    flex-direction: row;
-    justify-content: space-around;
-    padding: 6px 14px;
-    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 64px;
     background: #0E0E0E;
-  }
-
-  .janjiyuk-sidebar-top,
-  .janjiyuk-sidebar-bottom {
-    display: none;
-  }
-
-  .janjiyuk-sidebar-nav {
-    flex-direction: row;
+    border-top: 1px solid #222222;
+    display: flex;
+    align-items: center;
     justify-content: space-around;
-    gap: 4px;
+    padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px));
+    z-index: 100;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.35);
   }
 
-  .janjiyuk-nav-btn {
-    width: 40px;
-    height: 40px;
+  .mobile-bottom-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 10px;
     border-radius: 12px;
+    color: #8C8C84;
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 600;
+    transition: all var(--transition-fast);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    flex: 1;
+    max-width: 72px;
   }
+
+  .mobile-bottom-tab .tab-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-bottom-tab:hover {
+    color: #FFFFFF;
+  }
+
+  .mobile-bottom-tab.active {
+    color: var(--color-lime) !important;
+  }
+
+  .mobile-bottom-tab.active .tab-icon svg {
+    stroke: var(--color-lime);
+  }
+
+  /* Slide-out Mobile Navigation Drawer */
+  .janjiyuk-mobile-drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px);
+    z-index: 200;
+    display: flex;
+    justify-content: flex-end;
+    animation: fadeInDrawer 0.2s ease-out;
+  }
+
+  .janjiyuk-mobile-drawer {
+    width: min(320px, 86vw);
+    height: 100%;
+    background: var(--theme-bg-card);
+    border-left: 1px solid var(--theme-border-card);
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    box-shadow: -10px 0 35px rgba(0, 0, 0, 0.4);
+    animation: slideInDrawer 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow-y: auto;
+    box-sizing: border-box;
+  }
+
+  .drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--theme-border-subtle);
+  }
+
+  .drawer-close-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--theme-input-bg);
+    color: var(--color-text);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .drawer-user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--theme-border-subtle);
+  }
+
+  .drawer-nav-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px 0;
+    flex: 1;
+  }
+
+  .drawer-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: 12px;
+    color: var(--color-text);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all var(--transition-fast);
+  }
+
+  .drawer-nav-link:hover {
+    background: var(--theme-input-bg);
+  }
+
+  .drawer-nav-link.active {
+    background: var(--color-lime);
+    color: var(--color-black);
+    font-weight: 700;
+  }
+
+  .drawer-nav-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .drawer-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 14px;
+    border-top: 1px solid var(--theme-border-subtle);
+  }
+
+  .drawer-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 14px;
+    border-radius: 12px;
+    background: var(--theme-input-bg);
+    color: var(--color-text);
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--transition-fast);
+  }
+
+  .drawer-action-btn.logout {
+    color: #EF4444;
+  }
+
+  .drawer-action-btn:hover {
+    opacity: 0.9;
+  }
+}
+
+@keyframes fadeInDrawer {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInDrawer {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
 }
