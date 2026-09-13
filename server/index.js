@@ -3,8 +3,13 @@
  * Runs on port 3001 and handles Google Calendar OAuth 2.0 and API synchronization.
  */
 
+import dns from 'dns';
 import express from 'express';
 import cors from 'cors';
+
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch (_e) {}
 import { createClient } from '@supabase/supabase-js';
 import { config } from './config.js';
 import authRoutes from './routes/auth.js';
