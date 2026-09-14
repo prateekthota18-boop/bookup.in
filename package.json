@@ -10,7 +10,7 @@
     "start": "node server/index.js",
     "build": "vite build",
     "lint": "oxlint",
-    "test": "node tests/test-customer-booking-management.js && node tests/test-phase4-whatsapp.js && node tests/test-phase4b-email.js",
+    "test": "node tests/test-customer-booking-management.js && node tests/test-phase4-whatsapp.js && node tests/test-phase4b-email.js && node tests/test-verified-domain.js",
     "test:phase4": "node tests/test-phase4-whatsapp.js",
     "test:phase4b": "node tests/test-phase4b-email.js",
     "test:persistence": "node tests/test-customer-booking-persistence.js",

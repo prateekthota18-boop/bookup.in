@@ -101,7 +101,7 @@ export function generateIcsCalendar({
   const dtStart = formatUtcIcs(startDate);
   const dtEnd = formatUtcIcs(endDate);
 
-  const uid = bookingId ? `${bookingId}@bookup.in` : `${crypto.randomUUID()}@bookup.in`;
+  const uid = bookingId ? `${bookingId}@bookup-in.vercel.app` : `${crypto.randomUUID()}@bookup-in.vercel.app`;
   const summary = `${serviceName} with ${providerName}`;
 
   const descriptionLines = [

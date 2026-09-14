@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { useStore, formatCurrency } from '../../data/store';
 import { getInitials } from '../../utils/helpers';
+import { getBookingUrl, getBookingDisplayUrl } from '../../utils/url';
 import PillButton from '../../components/ui/PillButton';
 import BrandLogo from '../../components/ui/BrandLogo';
 
@@ -12,8 +13,7 @@ export default function BookingPageManagement() {
   const { state, addToast } = useStore();
   const provider = state.provider;
   const slug = provider?.slug || 'my-page';
-  const bookingUrl = `bookup.in/book/${slug}`;
-  const localUrl = `/book/${slug}`;
+  const bookingUrl = getBookingUrl(slug);
 
   const [selectedPreviewService, setSelectedPreviewService] = useState(() => {
     const active = (state.services || []).filter(s => s.isActive);
@@ -69,6 +69,7 @@ export default function BookingPageManagement() {
                 fontSize: '15px',
                 fontWeight: 600,
                 color: 'var(--color-text)',
+                wordBreak: 'break-all',
               }}>
                 {bookingUrl}
               </span>
@@ -77,7 +78,7 @@ export default function BookingPageManagement() {
                   📋 Copy Link
                 </PillButton>
                 <a
-                  href={localUrl}
+                  href={bookingUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ textDecoration: 'none' }}

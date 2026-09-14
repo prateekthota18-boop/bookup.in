@@ -156,7 +156,7 @@ export default function Landing() {
                 <span className="device-dot red" />
                 <span className="device-dot yellow" />
                 <span className="device-dot green" />
-                <span className="device-address">bookup.in/dashboard</span>
+                <span className="device-address">bookup-in.vercel.app/dashboard</span>
               </div>
               <div className="device-screen-content">
                 {/* Mini Dashboard representation */}

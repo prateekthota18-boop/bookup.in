@@ -74,7 +74,7 @@ async function runPhase4bSuite() {
     startTime: '14:30',
     duration: 60,
     meetLink: 'https://meet.google.com/abc-defg-hij',
-    managementUrl: 'https://bookup.in/manage/test-token-123',
+    managementUrl: 'https://bookup-in.vercel.app/manage/test-token-123',
     bookingId: 'booking-uuid-456',
   });
 
@@ -82,7 +82,7 @@ async function runPhase4bSuite() {
   assert(sampleIcs.includes('VERSION:2.0\r\n'), '.ics specifies VERSION:2.0');
   assert(sampleIcs.includes('METHOD:REQUEST\r\n'), '.ics specifies METHOD:REQUEST');
   assert(sampleIcs.includes('BEGIN:VEVENT\r\n'), '.ics defines BEGIN:VEVENT');
-  assert(sampleIcs.includes('UID:booking-uuid-456@bookup.in\r\n'), 'UID contains booking ID and bookup.in domain');
+  assert(sampleIcs.includes('UID:booking-uuid-456@bookup-in.vercel.app\r\n'), 'UID contains booking ID and bookup-in.vercel.app domain');
   assert(/DTSTART:\d{8}T\d{6}Z\r\n/.test(sampleIcs), 'DTSTART is formatted as UTC timestamp ending in Z');
   assert(/DTEND:\d{8}T\d{6}Z\r\n/.test(sampleIcs), 'DTEND is formatted as UTC timestamp ending in Z');
   assert(sampleIcs.includes('LOCATION:https://meet.google.com/abc-defg-hij\r\n'), 'LOCATION contains the Google Meet link');
@@ -257,7 +257,7 @@ async function runPhase4bSuite() {
     startTime: '15:00',
     duration: 60,
     meetLink: 'https://meet.google.com/xyz-uvwx-rst',
-    managementUrl: 'https://bookup.in/manage/test-token',
+    managementUrl: 'https://bookup-in.vercel.app/manage/test-token',
   });
 
   assert(Boolean(capturedReminderMail), 'Reminder email dispatched');
@@ -310,7 +310,7 @@ async function runPhase4bSuite() {
       providerId: provider.id,
       serviceId: service.id,
       customerName: 'Email Test Customer',
-      customerEmail: 'customer-test@bookup.in',
+      customerEmail: 'customer-test@example.com',
       customerPhone: '9876543210',
       bookingDate: testDate,
       startTime: testTime,

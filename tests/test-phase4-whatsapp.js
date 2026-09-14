@@ -81,7 +81,7 @@ async function runPhase4Suite() {
   const failRes = await dummyService.sendTemplate({
     phone: '9876543210',
     template: WHATSAPP_TEMPLATES.CONFIRMATION_CUSTOMER,
-    variables: ['Service', 'Provider', '2026-10-15', '10:00', '60 mins', 'https://bookup.in/manage/123'],
+    variables: ['Service', 'Provider', '2026-10-15', '10:00', '60 mins', 'https://bookup-in.vercel.app/manage/123'],
   });
   assert(typeof failRes === 'object', 'sendTemplate returns object result');
   assert('success' in failRes, 'sendTemplate returns success boolean property');

@@ -8,6 +8,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useStore, generateId, formatCurrency } from '../data/store';
 import { ACTIONS } from '../data/actions';
 import { generateSlug, getInitials, DAYS_OF_WEEK, DAY_FULL_LABELS } from '../utils/helpers';
+import { getBookingUrl, getBookingDisplayUrl } from '../utils/url';
 import { supabase, isSupabaseConfigured } from '../services/supabase/supabaseClient';
 import { dbService } from '../services/supabase/dbService';
 import './Onboarding.css';
@@ -652,7 +653,7 @@ export default function Onboarding() {
           <h2>Your booking page is ready!</h2>
           <p>Share this link with your clients to start getting booked.</p>
           <div className="onb-link-display">
-            <span className="onb-link-url">bookup.in/book/{slug}</span>
+            <span className="onb-link-url" style={{ wordBreak: 'break-all' }}>{getBookingUrl(slug)}</span>
           </div>
           <div className="onb-completion-actions">
             <button className="btn btn-primary btn-lg" onClick={goToDashboard}>
@@ -663,7 +664,11 @@ export default function Onboarding() {
             </button>
             <button
               className="btn btn-whatsapp"
-              onClick={() => addToast('Link copied! Share it on WhatsApp. 📲')}
+              onClick={() => {
+                const url = getBookingUrl(slug);
+                navigator.clipboard?.writeText(url).catch(() => {});
+                addToast('Booking link copied! Share it on WhatsApp. 📲');
+              }}
             >
               💬 Share to WhatsApp
             </button>

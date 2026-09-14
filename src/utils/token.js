@@ -22,6 +22,8 @@ export function generateManagementToken() {
   );
 }
 
+import { getCustomerManagementUrl } from './url.js';
+
 /**
  * Computes SHA-256 hex digest of a management token.
  * Only the hash is persisted in the database, while the raw token is given to the customer in the URL.
@@ -59,8 +61,5 @@ export async function hashManagementToken(token) {
  * Build the full management URL for a given raw token.
  */
 export function buildManagementUrl(token) {
-  const origin =
-    (typeof window !== 'undefined' && window.location?.origin) ||
-    'https://bookup-in.vercel.app';
-  return `${origin.replace(/\/$/, '')}/manage/${encodeURIComponent(token)}`;
+  return getCustomerManagementUrl(token);
 }
