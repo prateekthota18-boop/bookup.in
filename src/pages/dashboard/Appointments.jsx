@@ -29,6 +29,7 @@ import PillButton from '../../components/ui/PillButton';
 const TABS = [
   { key: 'all', label: 'All' },
   { key: 'upcoming', label: 'Upcoming' },
+  { key: 'payment-pending', label: 'Payment Pending' },
   { key: 'completed', label: 'Completed' },
   { key: 'cancelled', label: 'Cancelled' },
   { key: 'no-show', label: 'No-show' },
@@ -67,6 +68,12 @@ export default function Appointments() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showNoShowModal, setShowNoShowModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  // Payment verification state
+  const [rejectModalBooking, setRejectModalBooking] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [processingPaymentId, setProcessingPaymentId] = useState(null);
+  const [viewScreenshotUrl, setViewScreenshotUrl] = useState(null);
 
   // Manual booking modal state
   const [showManualModal, setShowManualModal] = useState(false);
@@ -328,6 +335,158 @@ export default function Appointments() {
     }
   };
 
+  // Payment verification handlers
+  const handleConfirmPayment = async (booking) => {
+    if (!booking) return;
+    setProcessingPaymentId(booking.id);
+    try {
+      if (!state.auth?.isDemoMode && isSupabaseConfigured() && booking.id && !booking.id.startsWith('booking-')) {
+        await dbService.confirmPayment(booking.id);
+      }
+      dispatch({
+        type: ACTIONS.UPDATE_BOOKING,
+        payload: {
+          id: booking.id,
+          paymentStatus: 'confirmed',
+          paymentConfirmedAt: new Date().toISOString(),
+        },
+      });
+      addToast(`Payment confirmed for ${booking.customerName} ✓`);
+    } catch (err) {
+      addToast(err.message || 'Failed to confirm payment.', 'error');
+    } finally {
+      setProcessingPaymentId(null);
+    }
+  };
+
+  const handleOpenRejectPayment = (booking) => {
+    setRejectModalBooking(booking);
+    setRejectReason('');
+  };
+
+  const handleConfirmRejectPayment = async () => {
+    if (!rejectModalBooking || !rejectReason.trim()) return;
+    const booking = rejectModalBooking;
+    setProcessingPaymentId(booking.id);
+    try {
+      if (!state.auth?.isDemoMode && isSupabaseConfigured() && booking.id && !booking.id.startsWith('booking-')) {
+        await dbService.rejectPayment(booking.id, rejectReason.trim());
+      }
+
+      if (state.googleCalendar?.isConnected && booking.googleEventId) {
+        const providerId = state.provider?.id || 'provider-1';
+        realGoogleCalendarService.deleteEvent(booking.googleEventId, providerId);
+      }
+
+      dispatch({
+        type: ACTIONS.UPDATE_BOOKING,
+        payload: {
+          id: booking.id,
+          paymentStatus: 'rejected',
+          paymentRejectedAt: new Date().toISOString(),
+          paymentRejectedReason: rejectReason.trim(),
+          status: 'cancelled',
+        },
+      });
+
+      addToast(`Payment rejected for ${booking.customerName}. Slot freed.`);
+      setRejectModalBooking(null);
+      setRejectReason('');
+      if (selectedBooking === booking.id) {
+        setSelectedBooking(null);
+      }
+    } catch (err) {
+      addToast(err.message || 'Failed to reject payment.', 'error');
+    } finally {
+      setProcessingPaymentId(null);
+    }
+  };
+
+  const renderPaymentBadge = (b) => {
+    if (b.price <= 0 || b.paymentStatus === 'not_required') {
+      return null;
+    }
+    if (b.paymentStatus === 'confirmed') {
+      return (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '2px 8px',
+            borderRadius: '9999px',
+            fontSize: '11px',
+            fontWeight: 700,
+            background: '#DCFCE7',
+            color: '#166534',
+            border: '1px solid #86EFAC',
+          }}
+        >
+          Paid ✓
+        </span>
+      );
+    }
+    if (b.paymentStatus === 'verification_pending') {
+      return (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '2px 8px',
+            borderRadius: '9999px',
+            fontSize: '11px',
+            fontWeight: 700,
+            background: '#EFF6FF',
+            color: '#1E40AF',
+            border: '1px solid #BFDBFE',
+          }}
+        >
+          ⚡ Verification Pending
+        </span>
+      );
+    }
+    if (b.paymentStatus === 'rejected') {
+      return (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '2px 8px',
+            borderRadius: '9999px',
+            fontSize: '11px',
+            fontWeight: 700,
+            background: '#FEE2E2',
+            color: '#991B1B',
+            border: '1px solid #FECACA',
+          }}
+          title={b.paymentRejectedReason || 'Payment rejected'}
+        >
+          Payment Rejected
+        </span>
+      );
+    }
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '2px 8px',
+          borderRadius: '9999px',
+          fontSize: '11px',
+          fontWeight: 600,
+          background: '#FEF3C7',
+          color: '#92400E',
+          border: '1px solid #FDE68A',
+        }}
+      >
+        Awaiting Payment
+      </span>
+    );
+  };
+
   // Manual booking submission
   const manualSlotsDetailed = useMemo(() => {
     if (!manualForm.date || !manualForm.serviceId || !state.availability) return [];
@@ -419,11 +578,17 @@ export default function Appointments() {
     return {
       all: state.bookings.length,
       upcoming: state.bookings.filter(b => b.date >= today && b.status === 'confirmed').length,
+      'payment-pending': state.bookings.filter(b => b.paymentStatus === 'verification_pending').length,
       completed: state.bookings.filter(b => b.status === 'completed').length,
       cancelled: state.bookings.filter(b => b.status === 'cancelled' || b.status === 'late-cancellation').length,
       'no-show': state.bookings.filter(b => b.status === 'no-show').length,
     };
   }, [state.bookings, today]);
+
+  // Pending payment confirmations for coach alert section
+  const pendingPaymentBookings = useMemo(() => {
+    return state.bookings.filter(b => b.paymentStatus === 'verification_pending');
+  }, [state.bookings]);
 
   // Comprehensive Filtering & Sorting
   const filteredBookings = useMemo(() => {
@@ -443,6 +608,8 @@ export default function Appointments() {
         // 1. Tab filter
         if (activeTab === 'upcoming') {
           if (!(b.date >= today && b.status === 'confirmed')) return false;
+        } else if (activeTab === 'payment-pending') {
+          if (b.paymentStatus !== 'verification_pending') return false;
         } else if (activeTab === 'cancelled') {
           if (!(b.status === 'cancelled' || b.status === 'late-cancellation')) return false;
         } else if (activeTab !== 'all') {
@@ -465,7 +632,9 @@ export default function Appointments() {
 
         // 4. Status dropdown filter
         if (filterStatus !== 'all') {
-          if (filterStatus === 'cancelled') {
+          if (filterStatus === 'payment-pending') {
+            if (b.paymentStatus !== 'verification_pending') return false;
+          } else if (filterStatus === 'cancelled') {
             if (b.status !== 'cancelled' && b.status !== 'late-cancellation') return false;
           } else if (b.status !== filterStatus) {
             return false;
@@ -558,6 +727,36 @@ export default function Appointments() {
               <span className="item-icon">👁️</span>
               <span>View details</span>
             </button>
+
+            {/* Payment verification actions */}
+            {booking.paymentStatus === 'verification_pending' && (
+              <>
+                <button
+                  type="button"
+                  className="actions-dropdown-item"
+                  style={{ color: '#16A34A', fontWeight: 600 }}
+                  onClick={() => {
+                    setOpenDropdownId(null);
+                    handleConfirmPayment(booking);
+                  }}
+                >
+                  <span className="item-icon">✓</span>
+                  <span>Confirm Payment</span>
+                </button>
+                <button
+                  type="button"
+                  className="actions-dropdown-item"
+                  style={{ color: '#DC2626' }}
+                  onClick={() => {
+                    setOpenDropdownId(null);
+                    handleOpenRejectPayment(booking);
+                  }}
+                >
+                  <span className="item-icon">✕</span>
+                  <span>Reject Payment</span>
+                </button>
+              </>
+            )}
 
             {/* Confirmed actions */}
             {isConfirmed && (
@@ -747,6 +946,78 @@ export default function Appointments() {
               </div>
             </div>
           </div>
+
+          {/* Payment Information */}
+          {b.price > 0 && (
+            <div className="card card-padding">
+              <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, marginBottom: 'var(--space-4)' }}>Payment</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                <div>
+                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)' }}>Verification Status</div>
+                  <div style={{ marginTop: 4 }}>{renderPaymentBadge(b)}</div>
+                </div>
+                {b.paymentMarkedPaidAt && (
+                  <div>
+                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)' }}>Marked Paid At</div>
+                    <div style={{ fontSize: 'var(--font-size-sm)' }}>{new Date(b.paymentMarkedPaidAt).toLocaleString()}</div>
+                  </div>
+                )}
+                {b.paymentConfirmedAt && (
+                  <div>
+                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)' }}>Confirmed At</div>
+                    <div style={{ fontSize: 'var(--font-size-sm)' }}>{new Date(b.paymentConfirmedAt).toLocaleString()}</div>
+                  </div>
+                )}
+                {b.paymentRejectedReason && (
+                  <div>
+                    <div style={{ fontSize: 'var(--font-size-xs)', color: '#DC2626', fontWeight: 600 }}>Rejection Reason</div>
+                    <div style={{ fontSize: 'var(--font-size-sm)', color: '#DC2626' }}>{b.paymentRejectedReason}</div>
+                  </div>
+                )}
+                {b.paymentScreenshotUrl && (
+                  <div>
+                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)', marginBottom: 6 }}>Proof Screenshot</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <img
+                        src={b.paymentScreenshotUrl}
+                        alt="Proof of payment"
+                        style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--theme-border)', cursor: 'pointer' }}
+                        onClick={() => setViewScreenshotUrl(b.paymentScreenshotUrl)}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setViewScreenshotUrl(b.paymentScreenshotUrl)}
+                      >
+                        🔍 View Full Proof
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {b.paymentStatus === 'verification_pending' && (
+                  <div style={{ display: 'flex', gap: '8px', marginTop: 'var(--space-2)' }}>
+                    <button
+                      type="button"
+                      className="btn btn-success btn-sm"
+                      disabled={processingPaymentId === b.id}
+                      onClick={() => handleConfirmPayment(b)}
+                    >
+                      ✓ Confirm Payment
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ color: '#DC2626', borderColor: '#FCA5A5' }}
+                      disabled={processingPaymentId === b.id}
+                      onClick={() => handleOpenRejectPayment(b)}
+                    >
+                      ✕ Reject Payment
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Actions bar inside detail view */}
@@ -775,6 +1046,7 @@ export default function Appointments() {
 
         {/* Render shared modals */}
         {renderModals(b, scheduledEndMin, freedPreviewMin)}
+        {renderPaymentModals()}
       </div>
     );
   }
@@ -798,6 +1070,142 @@ export default function Appointments() {
           + New Appointment
         </PillButton>
       </div>
+
+      {/* Pending Payment Confirmations Alert Block */}
+      {pendingPaymentBookings.length > 0 && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(245, 158, 11, 0.02) 100%)',
+          border: '1px solid rgba(245, 158, 11, 0.3)',
+          borderRadius: 'var(--radius-card)',
+          padding: '20px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          boxShadow: '0 4px 14px rgba(245, 158, 11, 0.08)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '1.4rem' }}>⚡</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#92400E', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  Pending Payment Confirmations
+                  <span style={{
+                    background: '#F59E0B',
+                    color: '#FFFFFF',
+                    fontSize: '11px',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    fontWeight: 800,
+                  }}>
+                    {pendingPaymentBookings.length}
+                  </span>
+                </h3>
+                <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: '#B45309' }}>
+                  These customers marked their payment as paid via UPI. Verify in your UPI app, then confirm or reject.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
+            {pendingPaymentBookings.map(b => (
+              <div key={b.id} style={{
+                background: 'var(--theme-bg-card)',
+                border: '1px solid rgba(245, 158, 11, 0.25)',
+                borderRadius: '12px',
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: '12px',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+              }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
+                    <div>
+                      <div
+                        onClick={() => setSelectedBooking(b.id)}
+                        style={{ fontWeight: 700, fontSize: '15px', color: 'var(--color-text)', cursor: 'pointer' }}
+                        title="View details"
+                      >
+                        {b.customerName}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--theme-text-muted)', marginTop: '1px' }}>
+                        {b.customerEmail || b.customerPhone || '—'}
+                      </div>
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--color-text)' }}>
+                      {formatCurrency(b.price)}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    <div>
+                      <span style={{ opacity: 0.8 }}>Session:</span> <strong>{b.serviceName}</strong> ({b.duration} min)
+                    </div>
+                    <div>
+                      <span style={{ opacity: 0.8 }}>Scheduled:</span> 📅 {formatDate(b.date)} at {formatTime(b.startTime)}
+                    </div>
+                    {b.paymentMarkedPaidAt && (
+                      <div style={{ fontSize: '11.5px', color: '#B45309', marginTop: '2px' }}>
+                        ⏱️ Marked paid {new Date(b.paymentMarkedPaidAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({formatDate(b.paymentMarkedPaidAt.split('T')[0])})
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Screenshot Thumbnail */}
+                  <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {b.paymentScreenshotUrl ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <img
+                          src={b.paymentScreenshotUrl}
+                          alt="Screenshot"
+                          style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--theme-border)', cursor: 'pointer' }}
+                          onClick={() => setViewScreenshotUrl(b.paymentScreenshotUrl)}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ fontSize: '12px', padding: '4px 8px' }}
+                          onClick={() => setViewScreenshotUrl(b.paymentScreenshotUrl)}
+                        >
+                          🔍 View Proof
+                        </button>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '11.5px', color: 'var(--theme-text-muted)', fontStyle: 'italic' }}>
+                        No screenshot uploaded
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: '8px', paddingTop: '10px', borderTop: '1px solid var(--theme-border)' }}>
+                  <button
+                    type="button"
+                    className="btn btn-success btn-sm"
+                    style={{ flex: 1 }}
+                    disabled={processingPaymentId === b.id}
+                    onClick={() => handleConfirmPayment(b)}
+                  >
+                    {processingPaymentId === b.id ? 'Confirming...' : '✓ Confirm'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ color: '#DC2626', borderColor: '#FCA5A5' }}
+                    disabled={processingPaymentId === b.id}
+                    onClick={() => handleOpenRejectPayment(b)}
+                  >
+                    ✕ Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Top Summary Metrics Cards */}
       <div className="appointments-metrics-grid">
@@ -936,6 +1344,7 @@ export default function Appointments() {
             >
               <option value="all">All statuses</option>
               <option value="confirmed">Confirmed</option>
+              <option value="payment-pending">Payment pending</option>
               <option value="completed">Completed</option>
               <option value="cancelled">Cancelled</option>
               <option value="no-show">No-show</option>
@@ -1063,9 +1472,12 @@ export default function Appointments() {
 
                         {/* Status */}
                         <td style={{ padding: '14px' }}>
-                          <span className={`badge ${getStatusBadgeClass(b.status)}`}>
-                            {getStatusLabel(b.status)}
-                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                            <span className={`badge ${getStatusBadgeClass(b.status)}`}>
+                              {getStatusLabel(b.status)}
+                            </span>
+                            {renderPaymentBadge(b)}
+                          </div>
                         </td>
 
                         {/* Actions */}
@@ -1154,10 +1566,13 @@ export default function Appointments() {
 
                   <div className="mobile-card-bottom">
                     <div className="mobile-card-price">{formatCurrency(b.price)}</div>
-                    <span className={`badge ${getStatusBadgeClass(b.status)}`}>
-                      <span className="badge-dot" />
-                      {getStatusLabel(b.status)}
-                    </span>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span className={`badge ${getStatusBadgeClass(b.status)}`}>
+                        <span className="badge-dot" />
+                        {getStatusLabel(b.status)}
+                      </span>
+                      {renderPaymentBadge(b)}
+                    </div>
                   </div>
                 </div>
               );
@@ -1219,6 +1634,7 @@ export default function Appointments() {
 
       {/* Modals */}
       {renderModals(activeModalTarget, activeModalTarget ? timeToMinutes(activeModalTarget.endTime) : 0, 0)}
+      {renderPaymentModals()}
 
       {/* Manual Booking Modal */}
       {showManualModal && (
@@ -1637,6 +2053,101 @@ export default function Appointments() {
               <div className="modal-footer">
                 <button className="btn btn-secondary" onClick={() => setShowDeleteModal(false)}>Cancel</button>
                 <button className="btn btn-danger" onClick={() => handleConfirmDelete(target.id)}>Delete</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // Helper to render payment verification modals (Reject reason modal, Screenshot preview modal)
+  function renderPaymentModals() {
+    return (
+      <>
+        {/* Reject Payment Modal */}
+        {rejectModalBooking && (
+          <div className="modal-overlay" onClick={() => !processingPaymentId && setRejectModalBooking(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3 style={{ color: '#DC2626' }}>Reject Payment</h3>
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={() => !processingPaymentId && setRejectModalBooking(null)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="modal-body">
+                <div style={{ padding: 'var(--space-3) var(--space-4)', background: 'var(--color-gray-50)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-4)' }}>
+                  <div style={{ fontWeight: 600, fontSize: 'var(--font-size-md)' }}>{rejectModalBooking.customerName}</div>
+                  <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                    {rejectModalBooking.serviceName} · {formatCurrency(rejectModalBooking.price)}
+                  </div>
+                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--theme-text-muted)', marginTop: 4 }}>
+                    📅 {formatDate(rejectModalBooking.date)} at {formatTime(rejectModalBooking.startTime)}
+                  </div>
+                </div>
+
+                <p style={{ fontSize: '13px', color: '#B45309', background: '#FEF3C7', padding: '10px 12px', borderRadius: '8px', marginBottom: '14px' }}>
+                  ⚠️ <strong>Slot will be freed</strong>: Rejecting this payment will cancel the booking and immediately release the time slot so other clients can book it.
+                </p>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600 }}>Reason for Rejection *</label>
+                  <textarea
+                    className="form-input"
+                    rows={3}
+                    placeholder="e.g., Payment not received in UPI account, incorrect reference ID, amount mismatch..."
+                    value={rejectReason}
+                    onChange={e => setRejectReason(e.target.value)}
+                    disabled={processingPaymentId === rejectModalBooking.id}
+                  />
+                  <span className="form-hint">This explanation will be visible to the customer on their booking status page.</span>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setRejectModalBooking(null)}
+                  disabled={processingPaymentId === rejectModalBooking.id}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={handleConfirmRejectPayment}
+                  disabled={processingPaymentId === rejectModalBooking.id || !rejectReason.trim()}
+                >
+                  {processingPaymentId === rejectModalBooking.id ? 'Rejecting...' : 'Reject Payment & Free Slot'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Screenshot Viewer Modal */}
+        {viewScreenshotUrl && (
+          <div className="modal-overlay" onClick={() => setViewScreenshotUrl(null)}>
+            <div className="modal modal-md" onClick={e => e.stopPropagation()} style={{ maxWidth: '520px', padding: '16px' }}>
+              <div className="modal-header" style={{ marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '16px' }}>Payment Proof Screenshot</h3>
+                <button type="button" className="modal-close" onClick={() => setViewScreenshotUrl(null)}>✕</button>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#000', borderRadius: '8px', overflow: 'hidden', maxHeight: '70vh' }}>
+                <img
+                  src={viewScreenshotUrl}
+                  alt="Payment proof screenshot"
+                  style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setViewScreenshotUrl(null)}>
+                  Close
+                </button>
               </div>
             </div>
           </div>

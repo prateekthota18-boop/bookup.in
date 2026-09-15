@@ -343,6 +343,15 @@ async function handleCreateBooking(req, res) {
       newBooking = fallbackRes.data;
     }
 
+    // 7a. Set payment_status based on service price
+    // Free bookings (price = 0) -> 'not_required', paid bookings -> 'awaiting_payment' (already default)
+    try {
+      const paymentStatus = (Number(service.price) || 0) === 0 ? 'not_required' : 'awaiting_payment';
+      await supabase.from('bookings').update({ payment_status: paymentStatus }).eq('id', newBooking.id);
+    } catch (_paymentStatusErr) {
+      // Non-blocking: payment_status column may not exist yet (pre-migration)
+    }
+
     // 7b. SYNCHRONOUS GOOGLE MEET LINK & CALENDAR EVENT GENERATION
     // Synchronously generate calendar event + Google Meet link before confirmation emails are sent.
     let meetLink = null;
@@ -624,6 +633,12 @@ router.get('/:token', async (req, res) => {
         managementUrl,
         meetLink: bookingRow.meet_link || null,
         mode: 'In-person / Online',
+        paymentStatus: bookingRow.payment_status || null,
+        paymentScreenshotUrl: bookingRow.payment_screenshot_url || null,
+        paymentMarkedPaidAt: bookingRow.payment_marked_paid_at || null,
+        paymentConfirmedAt: bookingRow.payment_confirmed_at || null,
+        paymentRejectedAt: bookingRow.payment_rejected_at || null,
+        paymentRejectedReason: bookingRow.payment_rejected_reason || null,
       },
       provider: {
         id: provider.id,
@@ -634,6 +649,8 @@ router.get('/:token', async (req, res) => {
         bufferTime: provider.buffer_time ?? 15,
         minNotice: provider.min_notice ?? 2,
         maxAdvanceBooking: provider.max_advance_booking ?? 30,
+        upiId: provider.upi_id || null,
+        qrCodeUrl: provider.qr_code_url || null,
       },
       service: {
         id: service.id,

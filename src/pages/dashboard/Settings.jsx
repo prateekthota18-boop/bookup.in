@@ -32,6 +32,13 @@ export default function Settings() {
   const [bioError, setBioError] = useState('');
   const [isConnectingGcal, setIsConnectingGcal] = useState(false);
 
+  // Payment settings state
+  const [upiId, setUpiId] = useState(provider.upiId || '');
+  const [qrCodeUrl, setQrCodeUrl] = useState(provider.qrCodeUrl || null);
+  const [uploadingQr, setUploadingQr] = useState(false);
+  const [savingPayment, setSavingPayment] = useState(false);
+  const qrInputRef = useRef(null);
+
   // Sync state if provider is hydrated from Supabase
   useEffect(() => {
     if (state.provider) {
@@ -43,6 +50,8 @@ export default function Settings() {
       if ((state.provider.avatar || state.provider.avatarUrl) && !avatar) {
         setAvatar(state.provider.avatar || state.provider.avatarUrl);
       }
+      if (state.provider.upiId && !upiId) setUpiId(state.provider.upiId);
+      if (state.provider.qrCodeUrl && !qrCodeUrl) setQrCodeUrl(state.provider.qrCodeUrl);
     }
   }, [state.provider]);
 
@@ -209,6 +218,49 @@ export default function Settings() {
 
     dispatch({ type: ACTIONS.UPDATE_PROVIDER, payload: { name, businessName, bio, email, phone } });
     addToast('Profile updated ✓');
+  };
+
+  const handleQrCodeUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      addToast('QR code image must be under 5MB.', 'error');
+      return;
+    }
+    setUploadingQr(true);
+    try {
+      const url = await dbService.uploadAvatar(provider.id, file);
+      if (url) {
+        setQrCodeUrl(url);
+        addToast('QR code uploaded ✓');
+      }
+    } catch (err) {
+      addToast(err.message || 'Failed to upload QR code.', 'error');
+    } finally {
+      setUploadingQr(false);
+      if (qrInputRef.current) qrInputRef.current.value = '';
+    }
+  };
+
+  const handleSavePaymentSettings = async () => {
+    setSavingPayment(true);
+    try {
+      if (isSupabaseConfigured() && provider.id) {
+        await dbService.updateProviderProfile(provider.id, {
+          upiId: upiId.trim() || null,
+          qrCodeUrl: qrCodeUrl || null,
+        });
+      }
+      dispatch({
+        type: ACTIONS.UPDATE_PROVIDER,
+        payload: { upiId: upiId.trim() || null, qrCodeUrl: qrCodeUrl || null },
+      });
+      addToast('Payment settings saved ✓');
+    } catch (err) {
+      addToast(err.message || 'Failed to save payment settings.', 'error');
+    } finally {
+      setSavingPayment(false);
+    }
   };
 
   const toggleReminder = (key) => {
@@ -404,6 +456,81 @@ export default function Settings() {
             </div>
           </div>
         </div>
+
+      {/* Payment Settings (UPI) */}
+      <div className="card card-padding" style={{ marginBottom: 'var(--space-6)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
+          <span style={{ fontSize: '1.25rem' }}>💳</span>
+          <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, margin: 0 }}>Payment Settings</h4>
+        </div>
+        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-5)' }}>
+          Set up direct UPI payments so customers can pay you directly. BookUp tracks payment verification but never handles money.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', maxWidth: 560 }}>
+          <div className="form-group">
+            <label className="form-label">UPI ID</label>
+            <input
+              className="form-input"
+              type="text"
+              placeholder="e.g. yourname@upi"
+              value={upiId}
+              onChange={e => setUpiId(e.target.value)}
+            />
+            <span className="form-hint">Your UPI ID will be shown to customers on the booking confirmation page.</span>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Payment QR Code</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+              {qrCodeUrl && (
+                <div style={{
+                  width: 100,
+                  height: 100,
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  border: '1px solid var(--color-border)',
+                  flexShrink: 0,
+                }}>
+                  <img src={qrCodeUrl} alt="QR Code" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <input
+                  type="file"
+                  ref={qrInputRef}
+                  accept="image/png,image/jpeg,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={handleQrCodeUpload}
+                />
+                <PillButton
+                  variant="primary"
+                  size="sm"
+                  onClick={() => qrInputRef.current?.click()}
+                  disabled={uploadingQr}
+                >
+                  {uploadingQr ? 'Uploading...' : (qrCodeUrl ? 'Change QR Code' : 'Upload QR Code')}
+                </PillButton>
+                {qrCodeUrl && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setQrCodeUrl(null)}
+                    style={{ fontSize: '12px', color: '#EF4444' }}
+                  >Remove</button>
+                )}
+                <span style={{ fontSize: '11.5px', color: 'var(--theme-text-muted)' }}>JPG, PNG, or WebP up to 5MB.</span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '8px' }}>
+            <PillButton variant="primary" size="sm" onClick={handleSavePaymentSettings} disabled={savingPayment}>
+              {savingPayment ? 'Saving...' : 'Save Payment Settings'}
+            </PillButton>
+          </div>
+        </div>
+      </div>
 
       {/* Google Calendar Integration (Optional) */}
       <div className="card card-padding" style={{ marginBottom: 'var(--space-6)' }}>

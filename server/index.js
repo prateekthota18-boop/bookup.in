@@ -16,6 +16,7 @@ import authRoutes from './routes/auth.js';
 import calendarRoutes from './routes/calendar.js';
 import publicBookingsRoutes from './routes/publicBookings.js';
 import internalNotificationsRoutes from './routes/internalNotifications.js';
+import paymentVerificationRoutes from './routes/paymentVerification.js';
 
 const app = express();
 
@@ -57,6 +58,8 @@ app.use('/api/calendar', calendarRoutes);
 app.use('/api/public/bookings', publicBookingsRoutes);
 app.use('/api/public/bookings/manage', publicBookingsRoutes);
 app.use('/api/internal/notifications', internalNotificationsRoutes);
+app.use('/api/public/bookings/manage', paymentVerificationRoutes);  // customer: mark-paid (token-authed)
+app.use('/api/bookings', paymentVerificationRoutes);                // provider: confirm/reject (JWT-authed)
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {

@@ -41,6 +41,8 @@ export const dbService = {
       maxAdvanceBooking: data.max_advance_booking ?? 30,
       avatar: data.avatar_url || data.avatar || null,
       avatarUrl: data.avatar_url || data.avatar || null,
+      upiId: data.upi_id || null,
+      qrCodeUrl: data.qr_code_url || null,
       createdAt: data.created_at,
     };
   },
@@ -73,6 +75,8 @@ export const dbService = {
       maxAdvanceBooking: data.max_advance_booking ?? 30,
       avatar: data.avatar_url || data.avatar || null,
       avatarUrl: data.avatar_url || data.avatar || null,
+      upiId: data.upi_id || null,
+      qrCodeUrl: data.qr_code_url || null,
       createdAt: data.created_at,
     };
   },
@@ -199,6 +203,8 @@ export const dbService = {
     if (fields.maxAdvanceBooking !== undefined) updatePayload.max_advance_booking = fields.maxAdvanceBooking;
     if (fields.avatarUrl !== undefined) updatePayload.avatar_url = fields.avatarUrl;
     if (fields.avatar !== undefined && fields.avatarUrl === undefined) updatePayload.avatar_url = fields.avatar;
+    if (fields.upiId !== undefined) updatePayload.upi_id = fields.upiId;
+    if (fields.qrCodeUrl !== undefined) updatePayload.qr_code_url = fields.qrCodeUrl;
 
     const { error } = await supabase
       .from('providers')
@@ -522,6 +528,12 @@ export const dbService = {
       status: b.status,
       notes: b.notes || '',
       createdAt: b.created_at,
+      paymentStatus: b.payment_status || null,
+      paymentScreenshotUrl: b.payment_screenshot_url || null,
+      paymentMarkedPaidAt: b.payment_marked_paid_at || null,
+      paymentConfirmedAt: b.payment_confirmed_at || null,
+      paymentRejectedAt: b.payment_rejected_at || null,
+      paymentRejectedReason: b.payment_rejected_reason || null,
     }));
   },
 
@@ -961,4 +973,90 @@ export const dbService = {
       policies: policy,
     };
   },
+
+  // ===========================================================================
+  // PAYMENT VERIFICATION (Coach / Provider)
+  // ===========================================================================
+
+  async confirmPayment(bookingId) {
+    if (!bookingId) throw new Error('Booking ID is required');
+
+    if (!isSupabaseConfigured()) {
+      return { success: true, booking: { id: bookingId, paymentStatus: 'confirmed' } };
+    }
+
+    const apiBase = getApiBase();
+    let authHeaders = {};
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        authHeaders = { Authorization: `Bearer ${session.access_token}` };
+      }
+    } catch (err) {
+      console.warn('Could not retrieve Supabase session token:', err);
+    }
+
+    const res = await fetch(`${apiBase}/bookings/${encodeURIComponent(bookingId)}/confirm-payment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...authHeaders,
+      },
+    });
+
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(result.error || 'Failed to confirm payment');
+    }
+    return result;
+  },
+
+  async rejectPayment(bookingId, reason) {
+    if (!bookingId) throw new Error('Booking ID is required');
+    if (!reason || !reason.trim()) throw new Error('A reason for rejection is required');
+
+    if (!isSupabaseConfigured()) {
+      return { success: true, booking: { id: bookingId, paymentStatus: 'rejected', status: 'cancelled' } };
+    }
+
+    const apiBase = getApiBase();
+    let authHeaders = {};
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        authHeaders = { Authorization: `Bearer ${session.access_token}` };
+      }
+    } catch (err) {
+      console.warn('Could not retrieve Supabase session token:', err);
+    }
+
+    const res = await fetch(`${apiBase}/bookings/${encodeURIComponent(bookingId)}/reject-payment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify({ reason: reason.trim() }),
+    });
+
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(result.error || 'Failed to reject payment');
+    }
+    return result;
+  },
 };
+
+function getApiBase() {
+  const envUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || '';
+  if (envUrl.trim()) {
+    return `${envUrl.trim().replace(/\/$/, '')}/api`;
+  }
+  if (typeof window !== 'undefined' && window.location?.hostname?.includes('vercel.app')) {
+    return 'https://bookup-in.onrender.com/api';
+  }
+  return '/api';
+}
+

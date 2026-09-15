@@ -48,6 +48,11 @@ export default function CustomerBooking() {
 
   const today = new Date().toISOString().split('T')[0];
 
+  // Payment state
+  const [paymentScreenshot, setPaymentScreenshot] = useState(null);
+  const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+  const paymentFileRef = { current: null };
+
   const [supabaseBookingData, setSupabaseBookingData] = useState(null);
   const bookingInState = state.bookings?.find(
     b => b.managementToken === lookupIdentifier
@@ -286,6 +291,34 @@ export default function CustomerBooking() {
   const isCancelled = resolvedBooking.status === 'cancelled' || resolvedBooking.status === 'late-cancellation';
   const isCompleted = resolvedBooking.status === 'completed';
 
+  const paymentStatus = resolvedBooking?.paymentStatus || null;
+  const providerUpiId = supabaseBookingData?.provider?.upiId || provider?.upiId || null;
+  const providerQrCodeUrl = supabaseBookingData?.provider?.qrCodeUrl || provider?.qrCodeUrl || null;
+  const showPaymentSection = paymentStatus && paymentStatus !== 'not_required';
+
+  const handleMarkPaid = async () => {
+    if (isMarkingPaid) return;
+    setIsMarkingPaid(true);
+    try {
+      await customerBookingService.markPaid(lookupIdentifier, paymentScreenshot);
+      addToast('Payment marked as paid. Awaiting coach verification.');
+      setSupabaseBookingData(prev => prev ? {
+        ...prev,
+        booking: {
+          ...prev.booking,
+          paymentStatus: 'verification_pending',
+          paymentMarkedPaidAt: new Date().toISOString(),
+        },
+      } : null);
+      setPaymentScreenshot(null);
+    } catch (err) {
+      console.error('Failed to mark paid:', err);
+      addToast(err.message || 'Failed to mark payment.', 'error');
+    } finally {
+      setIsMarkingPaid(false);
+    }
+  };
+
   const meetUrl = resolvedBooking?.meetLink || resolvedBooking?.meet_link;
 
   return (
@@ -400,6 +433,231 @@ export default function CustomerBooking() {
           ) : (
             <div className="manage-meet-pending">
               Meet link will be sent before your session.
+            </div>
+          )}
+
+          {/* Payment Verification Section */}
+          {showPaymentSection && (
+            <div className="animate-fade-in-up" style={{ marginTop: 'var(--space-3)' }}>
+              {/* Awaiting Payment */}
+              {paymentStatus === 'awaiting_payment' && isConfirmed && (
+                <div style={{
+                  background: 'var(--theme-card-bg, #FAFAFA)',
+                  border: '1px solid var(--color-warning-200, #FDE68A)',
+                  borderRadius: '16px',
+                  padding: '20px',
+                  marginBottom: 'var(--space-3)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '18px' }}>💳</span>
+                    <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>Complete Payment</h3>
+                  </div>
+                  <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+                    Pay your coach directly via UPI to confirm your booking. Your slot is reserved — complete payment to secure it.
+                  </p>
+
+                  {/* UPI Info */}
+                  {(providerUpiId || providerQrCodeUrl) ? (
+                    <div style={{
+                      background: 'var(--color-bg-subtle, #F8FAFC)',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      marginBottom: '16px',
+                      border: '1px solid var(--color-border)',
+                    }}>
+                      {providerUpiId && (
+                        <div style={{ marginBottom: providerQrCodeUrl ? '12px' : 0 }}>
+                          <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--color-text-tertiary)', marginBottom: '4px' }}>UPI ID</div>
+                          <div style={{
+                            fontSize: '15px',
+                            fontWeight: 700,
+                            fontFamily: 'monospace',
+                            color: 'var(--color-text)',
+                            background: 'var(--theme-input-bg, #fff)',
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid var(--color-border)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}>
+                            <span>{providerUpiId}</span>
+                            <button
+                              type="button"
+                              onClick={() => { navigator.clipboard?.writeText(providerUpiId); addToast('UPI ID copied!'); }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                color: 'var(--color-primary-600)',
+                                fontWeight: 600,
+                              }}
+                            >Copy</button>
+                          </div>
+                        </div>
+                      )}
+                      {providerQrCodeUrl && (
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--color-text-tertiary)', marginBottom: '8px' }}>Scan to Pay</div>
+                          <img
+                            src={providerQrCodeUrl}
+                            alt="UPI QR Code"
+                            style={{ maxWidth: '200px', width: '100%', borderRadius: '12px', border: '1px solid var(--color-border)' }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{
+                      fontSize: '13px',
+                      color: 'var(--color-text-tertiary)',
+                      padding: '12px',
+                      background: 'var(--color-bg-subtle)',
+                      borderRadius: '12px',
+                      marginBottom: '16px',
+                      textAlign: 'center',
+                    }}>
+                      Contact your coach for payment details.
+                    </div>
+                  )}
+
+                  {resolvedBooking.price > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 16px',
+                      background: 'var(--color-primary-50, #EFF6FF)',
+                      borderRadius: '10px',
+                      marginBottom: '16px',
+                      fontWeight: 600,
+                      fontSize: '14px',
+                    }}>
+                      <span>Amount</span>
+                      <span style={{ fontSize: '16px', color: 'var(--color-primary-700)' }}>{formatCurrency(resolvedBooking.price)}</span>
+                    </div>
+                  )}
+
+                  {/* Screenshot Upload */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '6px', display: 'block' }}>
+                      Payment Screenshot (optional)
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={e => setPaymentScreenshot(e.target.files?.[0] || null)}
+                      style={{ fontSize: '13px' }}
+                    />
+                    {paymentScreenshot && (
+                      <div style={{ fontSize: '12px', color: 'var(--color-success-600)', marginTop: '4px' }}>
+                        ✓ {paymentScreenshot.name}
+                      </div>
+                    )}
+                  </div>
+
+                  <PillButton
+                    variant="primary"
+                    onClick={handleMarkPaid}
+                    disabled={isMarkingPaid}
+                    style={{ width: '100%', justifyContent: 'center' }}
+                  >
+                    {isMarkingPaid ? 'Submitting...' : "I've Paid ✓"}
+                  </PillButton>
+                </div>
+              )}
+
+              {/* Verification Pending */}
+              {paymentStatus === 'verification_pending' && (
+                <div style={{
+                  padding: '16px 20px',
+                  background: 'var(--color-warning-50, #FFFBEB)',
+                  border: '1px solid var(--color-warning-200, #FDE68A)',
+                  borderRadius: '16px',
+                  marginBottom: 'var(--space-3)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '16px' }}>⏳</span>
+                    <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-warning-800, #92400E)' }}>Payment Verification Pending</span>
+                  </div>
+                  <p style={{ fontSize: '13px', color: 'var(--color-warning-700, #A16207)', margin: 0, lineHeight: 1.5 }}>
+                    Your coach has been notified. They will verify your payment shortly.
+                    {resolvedBooking.paymentMarkedPaidAt && (
+                      <span style={{ display: 'block', marginTop: '4px', fontSize: '12px', opacity: 0.8 }}>
+                        Marked paid: {new Date(resolvedBooking.paymentMarkedPaidAt).toLocaleString()}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
+
+              {/* Payment Confirmed */}
+              {paymentStatus === 'confirmed' && (
+                <div style={{
+                  padding: '16px 20px',
+                  background: 'var(--color-lime-light, #F0FDF4)',
+                  border: '1px solid var(--color-success-200, #BBF7D0)',
+                  borderRadius: '16px',
+                  marginBottom: 'var(--space-3)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '16px' }}>✅</span>
+                    <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-success-800, #166534)' }}>Payment Confirmed</span>
+                  </div>
+                  <p style={{ fontSize: '13px', color: 'var(--color-success-700, #15803D)', margin: 0 }}>
+                    Your payment has been verified by your coach. Your booking is fully confirmed!
+                  </p>
+                </div>
+              )}
+
+              {/* Payment Rejected */}
+              {paymentStatus === 'rejected' && (
+                <div style={{
+                  padding: '16px 20px',
+                  background: 'var(--color-error-50, #FEF2F2)',
+                  border: '1px solid var(--color-error-200, #FECACA)',
+                  borderRadius: '16px',
+                  marginBottom: 'var(--space-3)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '16px' }}>❌</span>
+                    <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-error-800, #991B1B)' }}>Payment Rejected</span>
+                  </div>
+                  <p style={{ fontSize: '13px', color: 'var(--color-error-700, #B91C1C)', margin: '0 0 8px 0', lineHeight: 1.5 }}>
+                    Your coach rejected the payment verification.
+                  </p>
+                  {resolvedBooking.paymentRejectedReason && (
+                    <div style={{
+                      fontSize: '13px',
+                      color: 'var(--color-error-700)',
+                      background: 'var(--color-error-100, #FEE2E2)',
+                      borderRadius: '8px',
+                      padding: '10px 12px',
+                      marginBottom: '12px',
+                    }}>
+                      <strong>Reason:</strong> {resolvedBooking.paymentRejectedReason}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <Link to={`/book/${providerSlug}`} style={{ textDecoration: 'none', flex: 1, minWidth: '120px' }}>
+                      <PillButton variant="primary" style={{ width: '100%', justifyContent: 'center' }}>
+                        Book Again
+                      </PillButton>
+                    </Link>
+                    {(provider?.phone || provider?.email) && (
+                      <a
+                        href={provider?.phone ? `tel:${provider.phone}` : `mailto:${provider.email}`}
+                        style={{ textDecoration: 'none', flex: 1, minWidth: '120px' }}
+                      >
+                        <PillButton variant="secondary" style={{ width: '100%', justifyContent: 'center' }}>
+                          Contact Coach
+                        </PillButton>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

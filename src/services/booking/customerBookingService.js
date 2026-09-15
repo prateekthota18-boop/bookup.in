@@ -116,4 +116,31 @@ export const customerBookingService = {
     }
     return result;
   },
+
+  /**
+   * Mark booking as paid (customer-side, token-authed)
+   * Sends optional screenshot file via FormData
+   */
+  async markPaid(token, screenshotFile = null) {
+    if (!token) throw new Error('Management token is required');
+    const apiBase = getApiBase();
+
+    const formData = new FormData();
+    if (screenshotFile) {
+      formData.append('screenshot', screenshotFile);
+    }
+
+    const res = await fetch(`${apiBase}/public/bookings/manage/${encodeURIComponent(token)}/mark-paid`, {
+      method: 'POST',
+      body: screenshotFile ? formData : undefined,
+      headers: screenshotFile ? { Accept: 'application/json' } : { 'Content-Type': 'application/json', Accept: 'application/json' },
+    });
+
+    const result = await res.json();
+    if (!res.ok) {
+      throw new Error(result.error || 'Failed to mark payment');
+    }
+    return result;
+  },
 };
+
