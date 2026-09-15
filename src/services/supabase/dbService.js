@@ -650,6 +650,12 @@ export const dbService = {
         notes: cleanNotes,
         createdAt: data.created_at,
         managementToken: trimmed,
+        paymentStatus: data.payment_status || ((Number(data.price) || 0) > 0 ? 'awaiting_payment' : 'not_required'),
+        paymentScreenshotUrl: data.payment_screenshot_url || null,
+        paymentMarkedPaidAt: data.payment_marked_paid_at || null,
+        paymentConfirmedAt: data.payment_confirmed_at || null,
+        paymentRejectedAt: data.payment_rejected_at || null,
+        paymentRejectedReason: data.payment_rejected_reason || null,
       },
       provider: data.providers ? {
         id: data.providers.id,
@@ -661,6 +667,8 @@ export const dbService = {
         bufferTime: data.providers.buffer_time ?? 15,
         minNotice: data.providers.min_notice ?? 2,
         maxAdvanceBooking: data.providers.max_advance_booking ?? 30,
+        upiId: data.providers.upi_id || null,
+        qrCodeUrl: data.providers.qr_code_url || null,
       } : null,
       service: data.services ? {
         id: data.services.id,

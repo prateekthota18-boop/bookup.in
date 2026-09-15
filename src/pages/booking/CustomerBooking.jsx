@@ -291,10 +291,11 @@ export default function CustomerBooking() {
   const isCancelled = resolvedBooking.status === 'cancelled' || resolvedBooking.status === 'late-cancellation';
   const isCompleted = resolvedBooking.status === 'completed';
 
-  const paymentStatus = resolvedBooking?.paymentStatus || null;
-  const providerUpiId = supabaseBookingData?.provider?.upiId || provider?.upiId || null;
-  const providerQrCodeUrl = supabaseBookingData?.provider?.qrCodeUrl || provider?.qrCodeUrl || null;
-  const showPaymentSection = paymentStatus && paymentStatus !== 'not_required';
+  const rawPaymentStatus = resolvedBooking?.paymentStatus;
+  const paymentStatus = rawPaymentStatus || ((resolvedBooking?.price || 0) > 0 ? 'awaiting_payment' : 'not_required');
+  const providerUpiId = supabaseBookingData?.provider?.upiId || provider?.upiId || state.provider?.upiId || null;
+  const providerQrCodeUrl = supabaseBookingData?.provider?.qrCodeUrl || provider?.qrCodeUrl || state.provider?.qrCodeUrl || null;
+  const showPaymentSection = Boolean((resolvedBooking?.price || 0) > 0 && paymentStatus !== 'not_required');
 
   const handleMarkPaid = async () => {
     if (isMarkingPaid) return;
