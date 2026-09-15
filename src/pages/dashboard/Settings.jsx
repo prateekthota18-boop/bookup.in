@@ -229,7 +229,18 @@ export default function Settings() {
     }
     setUploadingQr(true);
     try {
-      const url = await dbService.uploadAvatar(provider.id, file);
+      let activeProviderId = provider?.id || 'coach';
+      if (isSupabaseConfigured()) {
+        try {
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          if (authUser) {
+            const existingProv = await dbService.getProviderByUserId(authUser.id);
+            if (existingProv?.id) activeProviderId = existingProv.id;
+          }
+        } catch (_) {}
+      }
+
+      const url = await dbService.uploadAvatar(activeProviderId, file);
       if (url) {
         setQrCodeUrl(url);
         addToast('QR code uploaded ✓');
@@ -245,12 +256,29 @@ export default function Settings() {
   const handleSavePaymentSettings = async () => {
     setSavingPayment(true);
     try {
-      if (isSupabaseConfigured() && provider.id) {
-        await dbService.updateProviderProfile(provider.id, {
+      let activeProviderId = provider?.id;
+
+      if (isSupabaseConfigured()) {
+        try {
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          if (authUser) {
+            const existingProv = await dbService.getProviderByUserId(authUser.id);
+            if (existingProv?.id) {
+              activeProviderId = existingProv.id;
+            }
+          }
+        } catch (authErr) {
+          console.warn('[Settings] Auth lookup warning in handleSavePaymentSettings:', authErr.message);
+        }
+      }
+
+      if (isSupabaseConfigured() && activeProviderId) {
+        await dbService.updateProviderProfile(activeProviderId, {
           upiId: upiId.trim() || null,
           qrCodeUrl: qrCodeUrl || null,
         });
       }
+
       dispatch({
         type: ACTIONS.UPDATE_PROVIDER,
         payload: { upiId: upiId.trim() || null, qrCodeUrl: qrCodeUrl || null },

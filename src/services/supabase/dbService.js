@@ -190,6 +190,13 @@ export const dbService = {
   async updateProviderProfile(providerId, fields) {
     if (!isSupabaseConfigured() || !providerId) return false;
 
+    // Guard: ensure providerId is a valid UUID before querying Supabase
+    const isUuid = typeof providerId === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/i.test(providerId);
+    if (!isUuid) {
+      console.warn(`[dbService] updateProviderProfile skipped DB update: providerId '${providerId}' is not a valid UUID.`);
+      return true;
+    }
+
     const updatePayload = {};
     if (fields.userId !== undefined) updatePayload.user_id = fields.userId;
     if (fields.name !== undefined) updatePayload.name = fields.name;
