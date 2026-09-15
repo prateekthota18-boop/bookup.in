@@ -5,7 +5,7 @@
  */
 
 import { useState, useMemo, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   useStore,
   formatCurrency,
@@ -34,8 +34,6 @@ import './BookingPage.css';
 export default function CustomerBooking() {
   const { token, id } = useParams();
   const lookupIdentifier = token || id;
-  const [searchParams] = useSearchParams();
-  const isJustConfirmed = searchParams.get('confirmed') === 'true';
 
   const navigate = useNavigate();
   const { state, dispatch, addToast } = useStore();
@@ -287,31 +285,86 @@ export default function CustomerBooking() {
     window.open(gcalUrl, '_blank', 'noopener,noreferrer');
   };
 
+  const [isRetryingPayment, setIsRetryingPayment] = useState(false);
+
+  const isPaidService = (resolvedBooking?.price || 0) > 0;
+  const rawPaymentStatus = resolvedBooking?.paymentStatus;
+  let paymentStatus = rawPaymentStatus || (isPaidService ? 'awaiting_payment' : 'not_required');
+  if (isRetryingPayment) {
+    paymentStatus = 'awaiting_payment';
+  }
+
   const isConfirmed = resolvedBooking.status === 'confirmed';
   const isCancelled = resolvedBooking.status === 'cancelled' || resolvedBooking.status === 'late-cancellation';
   const isCompleted = resolvedBooking.status === 'completed';
 
-  const rawPaymentStatus = resolvedBooking?.paymentStatus;
-  const paymentStatus = rawPaymentStatus || ((resolvedBooking?.price || 0) > 0 ? 'awaiting_payment' : 'not_required');
+  const providerName = provider?.name || provider?.businessName || 'Coach';
   const providerUpiId = supabaseBookingData?.provider?.upiId || provider?.upiId || state.provider?.upiId || null;
   const providerQrCodeUrl = supabaseBookingData?.provider?.qrCodeUrl || provider?.qrCodeUrl || state.provider?.qrCodeUrl || null;
-  const showPaymentSection = Boolean((resolvedBooking?.price || 0) > 0 && paymentStatus !== 'not_required');
+  const showPaymentSection = Boolean(isPaidService && paymentStatus !== 'not_required');
+
+  // Compute Headline, Subline, Celebrate Icon, and Status Badge strictly from payment_status and booking state
+  let celebrateBadge = '🎉';
+  let heroHeadline = "You're booked!";
+  let heroSubline = `Your appointment with ${providerName} is confirmed.`;
+  let statusBadgeText = getStatusLabel(resolvedBooking.status);
+  let statusBadgeStyle = null;
+
+  if (isCancelled) {
+    celebrateBadge = '❌';
+    heroHeadline = 'Appointment Cancelled';
+    heroSubline = `Your appointment with ${providerName} has been cancelled.`;
+    statusBadgeText = getStatusLabel(resolvedBooking.status);
+  } else if (isCompleted) {
+    celebrateBadge = '✓';
+    heroHeadline = 'Session Completed';
+    heroSubline = `Thank you for attending your session with ${providerName}.`;
+    statusBadgeText = 'Completed';
+  } else if (isPaidService) {
+    if (paymentStatus === 'awaiting_payment') {
+      celebrateBadge = '💳';
+      heroHeadline = 'Almost there — complete your payment';
+      heroSubline = `Your appointment with ${providerName} is reserved. Complete payment to secure your spot.`;
+      statusBadgeText = 'Awaiting Payment';
+      statusBadgeStyle = { background: '#FEF3C7', color: '#92400E', border: '1px solid #FCD34D' };
+    } else if (paymentStatus === 'verification_pending') {
+      celebrateBadge = '⏱️';
+      heroHeadline = `Payment submitted — waiting for ${providerName} to confirm`;
+      heroSubline = `Your coach will verify your payment in their UPI app shortly.`;
+      statusBadgeText = 'Verification Pending';
+      statusBadgeStyle = { background: '#EFF6FF', color: '#1E40AF', border: '1px solid #BFDBFE' };
+    } else if (paymentStatus === 'confirmed') {
+      celebrateBadge = '🎉';
+      heroHeadline = "You're booked!";
+      heroSubline = `Your appointment with ${providerName} is confirmed.`;
+      statusBadgeText = 'Confirmed';
+      statusBadgeStyle = { background: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC' };
+    } else if (paymentStatus === 'rejected') {
+      celebrateBadge = '⚠️';
+      heroHeadline = "Payment couldn't be verified";
+      heroSubline = `Your payment submission could not be verified by ${providerName}.`;
+      statusBadgeText = 'Payment Rejected';
+      statusBadgeStyle = { background: '#FEE2E2', color: '#991B1B', border: '1px solid #FECACA' };
+    }
+  }
 
   const handleMarkPaid = async () => {
     if (isMarkingPaid) return;
     setIsMarkingPaid(true);
     try {
-      await customerBookingService.markPaid(lookupIdentifier, paymentScreenshot);
+      const res = await customerBookingService.markPaid(lookupIdentifier, paymentScreenshot);
       addToast('Payment marked as paid. Awaiting coach verification.');
       setSupabaseBookingData(prev => prev ? {
         ...prev,
         booking: {
           ...prev.booking,
           paymentStatus: 'verification_pending',
-          paymentMarkedPaidAt: new Date().toISOString(),
+          paymentMarkedPaidAt: res?.booking?.paymentMarkedPaidAt || new Date().toISOString(),
+          paymentScreenshotUrl: res?.booking?.paymentScreenshotUrl || prev.booking?.paymentScreenshotUrl,
         },
       } : null);
       setPaymentScreenshot(null);
+      setIsRetryingPayment(false);
     } catch (err) {
       console.error('Failed to mark paid:', err);
       addToast(err.message || 'Failed to mark payment.', 'error');
@@ -345,17 +398,13 @@ export default function CustomerBooking() {
             {getInitials(provider?.name || 'U')}
           </div>
           <div className="manage-celebrate-badge">
-            {isCancelled ? '❌' : isCompleted ? '✓' : '🎉'}
+            {celebrateBadge}
           </div>
           <h1 className="manage-headline">
-            {isCancelled ? 'Appointment Cancelled' : isCompleted ? 'Session Completed' : "You're booked!"}
+            {heroHeadline}
           </h1>
           <p className="manage-subline">
-            {isCancelled
-              ? `Your appointment with ${provider?.name} has been cancelled.`
-              : isCompleted
-              ? `Thank you for attending your session with ${provider?.name}.`
-              : `Your appointment with ${provider?.name} is confirmed.`}
+            {heroSubline}
           </p>
         </div>
 
@@ -405,8 +454,11 @@ export default function CustomerBooking() {
             </div>
             <div className="manage-detail-row">
               <span className="manage-detail-label">Status</span>
-              <span className="badge badge-active" style={{ textTransform: 'capitalize' }}>
-                {getStatusLabel(resolvedBooking.status)}
+              <span
+                className={`badge ${statusBadgeStyle ? '' : 'badge-active'}`}
+                style={{ textTransform: 'capitalize', ...(statusBadgeStyle || {}) }}
+              >
+                {statusBadgeText}
               </span>
             </div>
           </div>
@@ -440,8 +492,8 @@ export default function CustomerBooking() {
           {/* Payment Verification Section */}
           {showPaymentSection && (
             <div className="animate-fade-in-up" style={{ marginTop: 'var(--space-3)' }}>
-              {/* Awaiting Payment */}
-              {paymentStatus === 'awaiting_payment' && isConfirmed && (
+              {/* 1. Awaiting Payment */}
+              {paymentStatus === 'awaiting_payment' && (
                 <div style={{
                   background: 'var(--theme-card-bg, #FAFAFA)',
                   border: '1px solid var(--color-warning-200, #FDE68A)',
@@ -569,7 +621,7 @@ export default function CustomerBooking() {
                 </div>
               )}
 
-              {/* Verification Pending */}
+              {/* 2. Verification Pending */}
               {paymentStatus === 'verification_pending' && (
                 <div style={{
                   padding: '16px 20px',
@@ -579,40 +631,47 @@ export default function CustomerBooking() {
                   marginBottom: 'var(--space-3)',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '16px' }}>⏳</span>
+                    <span style={{ fontSize: '16px' }}>⏱️</span>
                     <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-warning-800, #92400E)' }}>Payment Verification Pending</span>
                   </div>
                   <p style={{ fontSize: '13px', color: 'var(--color-warning-700, #A16207)', margin: 0, lineHeight: 1.5 }}>
-                    Your coach has been notified. They will verify your payment shortly.
-                    {resolvedBooking.paymentMarkedPaidAt && (
-                      <span style={{ display: 'block', marginTop: '4px', fontSize: '12px', opacity: 0.8 }}>
-                        Marked paid: {new Date(resolvedBooking.paymentMarkedPaidAt).toLocaleString()}
-                      </span>
-                    )}
+                    Your payment details have been submitted. Your coach ({providerName}) will verify the payment shortly.
                   </p>
+                  {resolvedBooking.paymentMarkedPaidAt && (
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--color-warning-800)', fontWeight: 500 }}>
+                      Marked paid on: {new Date(resolvedBooking.paymentMarkedPaidAt).toLocaleString()}
+                    </div>
+                  )}
+                  {resolvedBooking.paymentScreenshotUrl && (
+                    <div style={{ marginTop: '8px', fontSize: '12px' }}>
+                      <a href={resolvedBooking.paymentScreenshotUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary-600)', fontWeight: 600 }}>
+                        View uploaded payment screenshot ↗
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Payment Confirmed */}
+              {/* 3. Payment Confirmed */}
               {paymentStatus === 'confirmed' && (
                 <div style={{
-                  padding: '16px 20px',
+                  padding: '14px 18px',
                   background: 'var(--color-lime-light, #F0FDF4)',
                   border: '1px solid var(--color-success-200, #BBF7D0)',
-                  borderRadius: '16px',
+                  borderRadius: '14px',
                   marginBottom: 'var(--space-3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '13px',
+                  color: 'var(--color-success-800, #166534)',
+                  fontWeight: 600,
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '16px' }}>✅</span>
-                    <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-success-800, #166534)' }}>Payment Confirmed</span>
-                  </div>
-                  <p style={{ fontSize: '13px', color: 'var(--color-success-700, #15803D)', margin: 0 }}>
-                    Your payment has been verified by your coach. Your booking is fully confirmed!
-                  </p>
+                  <span>Payment received ✓</span>
                 </div>
               )}
 
-              {/* Payment Rejected */}
+              {/* 4. Payment Rejected */}
               {paymentStatus === 'rejected' && (
                 <div style={{
                   padding: '16px 20px',
@@ -623,33 +682,35 @@ export default function CustomerBooking() {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                     <span style={{ fontSize: '16px' }}>❌</span>
-                    <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-error-800, #991B1B)' }}>Payment Rejected</span>
+                    <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-error-800, #991B1B)' }}>Payment Could Not Be Verified</span>
                   </div>
-                  <p style={{ fontSize: '13px', color: 'var(--color-error-700, #B91C1C)', margin: '0 0 8px 0', lineHeight: 1.5 }}>
-                    Your coach rejected the payment verification.
+                  <p style={{ fontSize: '13px', color: 'var(--color-error-700, #B91C1C)', margin: '0 0 10px 0', lineHeight: 1.5 }}>
+                    Your coach could not verify your payment. The reserved slot was released.
                   </p>
                   {resolvedBooking.paymentRejectedReason && (
                     <div style={{
                       fontSize: '13px',
-                      color: 'var(--color-error-700)',
-                      background: 'var(--color-error-100, #FEE2E2)',
+                      color: 'var(--color-error-800)',
+                      background: '#FEE2E2',
                       borderRadius: '8px',
                       padding: '10px 12px',
-                      marginBottom: '12px',
+                      marginBottom: '14px',
                     }}>
-                      <strong>Reason:</strong> {resolvedBooking.paymentRejectedReason}
+                      <strong>Reason from coach:</strong> {resolvedBooking.paymentRejectedReason}
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    <Link to={`/book/${providerSlug}`} style={{ textDecoration: 'none', flex: 1, minWidth: '120px' }}>
-                      <PillButton variant="primary" style={{ width: '100%', justifyContent: 'center' }}>
-                        Book Again
-                      </PillButton>
-                    </Link>
+                    <PillButton
+                      variant="primary"
+                      onClick={() => setIsRetryingPayment(true)}
+                      style={{ flex: 1, minWidth: '130px', justifyContent: 'center' }}
+                    >
+                      Retry Payment
+                    </PillButton>
                     {(provider?.phone || provider?.email) && (
                       <a
                         href={provider?.phone ? `tel:${provider.phone}` : `mailto:${provider.email}`}
-                        style={{ textDecoration: 'none', flex: 1, minWidth: '120px' }}
+                        style={{ textDecoration: 'none', flex: 1, minWidth: '130px' }}
                       >
                         <PillButton variant="secondary" style={{ width: '100%', justifyContent: 'center' }}>
                           Contact Coach

@@ -344,7 +344,7 @@ export default function PublicBookingPage() {
       setSubmittingBooking(false);
 
       // Directly navigate to confirmation / manage screen
-      navigate(`/manage/${managementToken}?confirmed=true`, { replace: true });
+      navigate(`/manage/${managementToken}`, { replace: true });
 
       if (!isDemo && provider?.id) {
         realGoogleCalendarService.createEvent(booking, provider.id, provider.timezone || 'Asia/Kolkata').catch(() => {});
@@ -352,7 +352,7 @@ export default function PublicBookingPage() {
     } catch (e) {
       console.error('Final dispatch error:', e);
       setSubmittingBooking(false);
-      navigate(`/manage/${managementToken}?confirmed=true`, { replace: true });
+      navigate(`/manage/${managementToken}`, { replace: true });
     }
   };
 
