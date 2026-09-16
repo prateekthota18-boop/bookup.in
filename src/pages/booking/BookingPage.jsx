@@ -325,6 +325,7 @@ export default function PublicBookingPage() {
         price: authoritativePrice,
         depositAmount: authoritativeDeposit,
         depositStatus: 'na',
+        paymentStatus: (authoritativePrice || 0) > 0 ? 'awaiting_payment' : 'not_required',
         status: 'confirmed',
         source: 'BookUp booking page',
         notes: customerInfo.notes || '',

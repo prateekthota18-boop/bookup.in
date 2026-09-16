@@ -49,25 +49,26 @@ export default function CustomerBooking() {
   // Payment state
   const [paymentScreenshot, setPaymentScreenshot] = useState(null);
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+  const [isRetryingPayment, setIsRetryingPayment] = useState(false);
   const paymentFileRef = { current: null };
 
   const [supabaseBookingData, setSupabaseBookingData] = useState(null);
+  const [isLoading, setIsLoading] = useState(
+    () => Boolean(lookupIdentifier) && isSupabaseConfigured()
+  );
+
   const bookingInState = state.bookings?.find(
     b => b.managementToken === lookupIdentifier
   );
   const demoBooking = DEMO_BOOKINGS.find(
-    b => b.managementToken === lookupIdentifier
+    b => b.managementToken === lookupIdentifier || b.id === lookupIdentifier
   );
 
-  // Authoritative server projection is source of truth.
-  // In-memory state only provides instant optimistic render if the customer just completed booking with matching token.
+  // Authoritative server projection is source of truth when Supabase is configured.
+  // In-memory or demo state serves as fallback if Supabase is unconfigured or fetch fails.
   const resolvedBooking = isSupabaseConfigured()
-    ? (supabaseBookingData?.booking || (isJustConfirmed && bookingInState ? bookingInState : null))
+    ? (supabaseBookingData?.booking || (!isLoading ? (bookingInState || demoBooking || null) : null))
     : (supabaseBookingData?.booking || bookingInState || demoBooking || null);
-
-  const [isLoading, setIsLoading] = useState(
-    () => !resolvedBooking && Boolean(lookupIdentifier) && isSupabaseConfigured()
-  );
 
   const hasBookings = Boolean(state.bookings && state.bookings.length > 0);
 
@@ -285,8 +286,6 @@ export default function CustomerBooking() {
     window.open(gcalUrl, '_blank', 'noopener,noreferrer');
   };
 
-  const [isRetryingPayment, setIsRetryingPayment] = useState(false);
-
   const isPaidService = (resolvedBooking?.price || 0) > 0;
   const rawPaymentStatus = resolvedBooking?.paymentStatus;
   let paymentStatus = rawPaymentStatus || (isPaidService ? 'awaiting_payment' : 'not_required');
@@ -310,7 +309,13 @@ export default function CustomerBooking() {
   let statusBadgeText = getStatusLabel(resolvedBooking.status);
   let statusBadgeStyle = null;
 
-  if (isCancelled) {
+  if (paymentStatus === 'rejected') {
+    celebrateBadge = '⚠️';
+    heroHeadline = "Payment couldn't be verified";
+    heroSubline = `Your payment submission could not be verified by ${providerName}.`;
+    statusBadgeText = 'Payment Rejected';
+    statusBadgeStyle = { background: '#FEE2E2', color: '#991B1B', border: '1px solid #FECACA' };
+  } else if (isCancelled) {
     celebrateBadge = '❌';
     heroHeadline = 'Appointment Cancelled';
     heroSubline = `Your appointment with ${providerName} has been cancelled.`;
@@ -339,12 +344,6 @@ export default function CustomerBooking() {
       heroSubline = `Your appointment with ${providerName} is confirmed.`;
       statusBadgeText = 'Confirmed';
       statusBadgeStyle = { background: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC' };
-    } else if (paymentStatus === 'rejected') {
-      celebrateBadge = '⚠️';
-      heroHeadline = "Payment couldn't be verified";
-      heroSubline = `Your payment submission could not be verified by ${providerName}.`;
-      statusBadgeText = 'Payment Rejected';
-      statusBadgeStyle = { background: '#FEE2E2', color: '#991B1B', border: '1px solid #FECACA' };
     }
   }
 

@@ -26,6 +26,10 @@ import Settings from './pages/dashboard/Settings';
 import PublicBookingPage from './pages/booking/BookingPage';
 import CustomerBooking from './pages/booking/CustomerBooking';
 
+// Components & Context
+import ErrorBoundary from './components/ui/ErrorBoundary';
+import { ThemeProvider } from './context/ThemeContext';
+
 // Styles
 import './styles/global.css';
 import './styles/components.css';
@@ -86,10 +90,26 @@ function AppRoutes() {
       } />
 
       {/* Public booking page & Customer management */}
-      <Route path="/book/:slug" element={<PublicBookingPage />} />
-      <Route path="/manage/:token" element={<CustomerBooking />} />
-      <Route path="/booking/:token" element={<CustomerBooking />} />
-      <Route path="/booking/:id" element={<CustomerBooking />} />
+      <Route path="/book/:slug" element={
+        <ErrorBoundary title="Booking page error, please refresh">
+          <PublicBookingPage />
+        </ErrorBoundary>
+      } />
+      <Route path="/manage/:token" element={
+        <ErrorBoundary title="Something went wrong, please refresh">
+          <CustomerBooking />
+        </ErrorBoundary>
+      } />
+      <Route path="/booking/:token" element={
+        <ErrorBoundary title="Something went wrong, please refresh">
+          <CustomerBooking />
+        </ErrorBoundary>
+      } />
+      <Route path="/booking/:id" element={
+        <ErrorBoundary title="Something went wrong, please refresh">
+          <CustomerBooking />
+        </ErrorBoundary>
+      } />
 
       {/* Dashboard (protected) */}
       <Route path="/dashboard" element={
@@ -113,16 +133,16 @@ function AppRoutes() {
   );
 }
 
-import { ThemeProvider } from './context/ThemeContext';
-
 export default function App() {
   return (
-    <ThemeProvider>
-      <StoreProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </StoreProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <StoreProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </StoreProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
