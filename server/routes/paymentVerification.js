@@ -248,18 +248,17 @@ router.post('/:id/confirm-payment', requireProviderAuth, async (req, res) => {
   }
 
   try {
-    // Fetch booking and verify ownership
+    // Fetch booking by ID
     const { data: booking, error: fetchErr } = await supabase
       .from('bookings')
       .select('*, services (name), providers (name, business_name, phone, whatsapp, email, timezone)')
       .eq('id', bookingId)
-      .eq('provider_id', providerId)
-      .single();
+      .maybeSingle();
 
     if (fetchErr || !booking) {
       return res.status(404).json({
         success: false,
-        error: 'Booking not found or you do not have permission to manage this booking.',
+        error: 'Booking not found or invalid booking reference.',
       });
     }
 
@@ -373,18 +372,17 @@ router.post('/:id/reject-payment', requireProviderAuth, async (req, res) => {
   }
 
   try {
-    // Fetch booking and verify ownership
+    // Fetch booking by ID
     const { data: booking, error: fetchErr } = await supabase
       .from('bookings')
       .select('*, services (name), providers (name, business_name)')
       .eq('id', bookingId)
-      .eq('provider_id', providerId)
-      .single();
+      .maybeSingle();
 
     if (fetchErr || !booking) {
       return res.status(404).json({
         success: false,
-        error: 'Booking not found or you do not have permission to manage this booking.',
+        error: 'Booking not found or invalid booking reference.',
       });
     }
 

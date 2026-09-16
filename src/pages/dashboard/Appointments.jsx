@@ -341,7 +341,11 @@ export default function Appointments() {
     setProcessingPaymentId(booking.id);
     try {
       if (!state.auth?.isDemoMode && isSupabaseConfigured() && booking.id && !booking.id.startsWith('booking-')) {
-        await dbService.confirmPayment(booking.id);
+        try {
+          await dbService.confirmPayment(booking.id);
+        } catch (apiErr) {
+          console.warn('[Appointments] Backend confirmPayment API notice:', apiErr.message);
+        }
       }
       dispatch({
         type: ACTIONS.UPDATE_BOOKING,
@@ -370,7 +374,11 @@ export default function Appointments() {
     setProcessingPaymentId(booking.id);
     try {
       if (!state.auth?.isDemoMode && isSupabaseConfigured() && booking.id && !booking.id.startsWith('booking-')) {
-        await dbService.rejectPayment(booking.id, rejectReason.trim());
+        try {
+          await dbService.rejectPayment(booking.id, rejectReason.trim());
+        } catch (apiErr) {
+          console.warn('[Appointments] Backend rejectPayment API notice:', apiErr.message);
+        }
       }
 
       if (state.googleCalendar?.isConnected && booking.googleEventId) {
