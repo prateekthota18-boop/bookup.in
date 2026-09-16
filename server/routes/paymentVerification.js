@@ -248,14 +248,19 @@ router.post('/:id/confirm-payment', requireProviderAuth, async (req, res) => {
   }
 
   try {
-    // Fetch booking by ID
+    // Fetch booking by ID — use select('*') without joins to avoid FK lookup failures
     const { data: booking, error: fetchErr } = await supabase
       .from('bookings')
-      .select('*, services (name), providers (name, business_name, phone, whatsapp, email, timezone)')
+      .select('*')
       .eq('id', bookingId)
       .maybeSingle();
 
-    if (fetchErr || !booking) {
+    if (fetchErr) {
+      console.error('[PaymentVerification] confirm-payment fetch error:', fetchErr.message, fetchErr.code);
+    }
+
+    if (!booking) {
+      console.warn(`[PaymentVerification] confirm-payment: no booking found for id=${bookingId}`);
       return res.status(404).json({
         success: false,
         error: 'Booking not found or invalid booking reference.',
@@ -288,10 +293,24 @@ router.post('/:id/confirm-payment', requireProviderAuth, async (req, res) => {
 
     console.log(`[PaymentVerification] Booking ${bookingId} payment confirmed by provider ${providerId}`);
 
-    // Non-blocking WhatsApp confirmation notification to customer
-    const provider = booking.providers || {};
-    const service = booking.services || {};
+    // Fetch related provider/service data for notifications (non-blocking, separate query)
+    let provider = {};
+    let service = {};
+    try {
+      const { data: enriched } = await supabase
+        .from('bookings')
+        .select('services (name), providers (name, business_name, phone, whatsapp, email, timezone)')
+        .eq('id', bookingId)
+        .maybeSingle();
+      if (enriched) {
+        provider = enriched.providers || {};
+        service = enriched.services || {};
+      }
+    } catch (_e) {
+      console.warn('[PaymentVerification] Non-blocking: could not enrich booking with provider/service data');
+    }
 
+    // Non-blocking WhatsApp confirmation notification to customer
     try {
       if (booking.customer_whatsapp || booking.customer_phone) {
         await richAutomateService.sendCustomerConfirmation({
@@ -372,14 +391,19 @@ router.post('/:id/reject-payment', requireProviderAuth, async (req, res) => {
   }
 
   try {
-    // Fetch booking by ID
+    // Fetch booking by ID — use select('*') without joins to avoid FK lookup failures
     const { data: booking, error: fetchErr } = await supabase
       .from('bookings')
-      .select('*, services (name), providers (name, business_name)')
+      .select('*')
       .eq('id', bookingId)
       .maybeSingle();
 
-    if (fetchErr || !booking) {
+    if (fetchErr) {
+      console.error('[PaymentVerification] reject-payment fetch error:', fetchErr.message, fetchErr.code);
+    }
+
+    if (!booking) {
+      console.warn(`[PaymentVerification] reject-payment: no booking found for id=${bookingId}`);
       return res.status(404).json({
         success: false,
         error: 'Booking not found or invalid booking reference.',
