@@ -187,6 +187,32 @@ router.post('/:token/mark-paid', upload.single('screenshot'), async (req, res) =
 
     console.log(`[PaymentVerification] Booking ${booking.id} marked as paid by customer`);
 
+    // Dispatch email notification to coach/owner with payment screenshot details (non-blocking)
+    const providerEmail = booking.providers?.email || booking.provider_email;
+    const providerName = booking.providers?.name || booking.providers?.business_name || 'Coach';
+    const serviceName = booking.services?.name || booking.service_name || 'Session';
+    const amount = booking.price || booking.services?.price || 0;
+    const frontendBase = (config.frontendUrl || 'https://bookup-in.vercel.app').replace(/\/$/, '');
+    const dashboardUrl = `${frontendBase}/dashboard/appointments`;
+
+    if (providerEmail) {
+      emailService.sendPaymentSubmittedEmailToProvider({
+        to: providerEmail,
+        providerName,
+        customerName: booking.customer_name,
+        customerEmail: booking.customer_email,
+        customerPhone: booking.customer_phone,
+        serviceName,
+        bookingDate: booking.booking_date,
+        startTime: booking.start_time,
+        amount,
+        screenshotUrl,
+        dashboardUrl,
+      }).catch(mailErr => {
+        console.warn('[PaymentVerification] Non-blocking provider payment email warning:', mailErr.message);
+      });
+    }
+
     return res.json({
       success: true,
       message: 'Payment marked as paid. Awaiting coach verification.',

@@ -465,6 +465,144 @@ ${managementUrl ? `- Manage Appointment: ${managementUrl}` : ''}
       };
     }
   }
+
+  /**
+   * 4. Send Provider Notification Email when Customer Submits Payment & Screenshot
+   */
+  async sendPaymentSubmittedEmailToProvider({
+    to,
+    providerName,
+    customerName,
+    customerEmail = '',
+    customerPhone = '',
+    serviceName,
+    bookingDate,
+    startTime,
+    amount,
+    screenshotUrl = '',
+    dashboardUrl = '',
+  }) {
+    if (!to || !to.includes('@')) {
+      return { success: false, skipped: true, error: 'Missing or invalid provider email address' };
+    }
+
+    if (!this.isConfigured()) {
+      console.warn('[EmailService] Resend API key not configured. Skipping payment submission provider email.');
+      return { success: false, skipped: true, error: 'Resend API key not configured' };
+    }
+
+    try {
+      const client = this.getClient();
+      const subject = `💳 Payment Submitted: ${customerName} paid ₹${amount} for ${serviceName}`;
+
+      const screenshotSection = screenshotUrl
+        ? `<div style="margin: 20px 0 16px; padding: 16px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+             <div style="font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 8px;">📷 Payment Screenshot Attached:</div>
+             <a href="${screenshotUrl}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; font-weight: 600; text-decoration: underline; font-size: 14px;">
+               View Uploaded Payment Screenshot ↗
+             </a>
+           </div>`
+        : `<p style="color: #64748b; font-size: 13px;"><em>No screenshot image was attached by client.</em></p>`;
+
+      const dashboardButton = dashboardUrl
+        ? `<div style="margin: 24px 0 16px;">
+             <a href="${dashboardUrl}" style="background-color: #166534; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; display: inline-block;">
+               Review & Confirm Payment in Dashboard
+             </a>
+           </div>`
+        : '';
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${subject}</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 32px 16px; color: #1e293b;">
+          <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div style="margin-bottom: 20px;">
+              <span style="font-size: 18px; font-weight: 700; color: #0f172a;">BookUp</span>
+            </div>
+            
+            <h1 style="font-size: 20px; font-weight: 700; color: #166534; margin: 0 0 8px;">💳 Payment Details Submitted</h1>
+            <p style="font-size: 15px; color: #334155; margin: 0 0 20px;">
+              Hi ${providerName || 'Coach'}, <strong>${customerName}</strong> has submitted payment details for their upcoming session. Please verify the payment in your UPI app and confirm or reject it in your BookUp dashboard.
+            </p>
+
+            <div style="background-color: #f1f5f9; border-radius: 8px; padding: 18px 20px; margin: 20px 0;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b; width: 35%;">Client</td>
+                  <td style="padding: 6px 0; color: #0f172a; font-weight: 600;">${customerName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Client Phone</td>
+                  <td style="padding: 6px 0; color: #0f172a;">${customerPhone || 'Not provided'}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Client Email</td>
+                  <td style="padding: 6px 0; color: #0f172a;">${customerEmail || 'Not provided'}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Service</td>
+                  <td style="padding: 6px 0; color: #0f172a; font-weight: 600;">${serviceName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Session Date & Time</td>
+                  <td style="padding: 6px 0; color: #0f172a; font-weight: 600;">${bookingDate} at ${startTime}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #64748b;">Amount Paid</td>
+                  <td style="padding: 6px 0; color: #166534; font-weight: 700; font-size: 16px;">₹${amount}</td>
+                </tr>
+              </table>
+            </div>
+
+            ${screenshotSection}
+
+            ${dashboardButton}
+
+            <p style="font-size: 12px; color: #64748b; margin-top: 24px;">
+              Once verified in your UPI app, click above to confirm the booking or reject if the payment was not received.
+            </p>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const text = `
+Payment Details Submitted!
+
+Hi ${providerName || 'Coach'}, ${customerName} has submitted payment details:
+- Client: ${customerName} (${customerPhone})
+- Service: ${serviceName}
+- Date & Time: ${bookingDate} at ${startTime}
+- Amount: ₹${amount}
+${screenshotUrl ? `- Screenshot: ${screenshotUrl}` : ''}
+${dashboardUrl ? `- Review in Dashboard: ${dashboardUrl}` : ''}
+      `.trim();
+
+      const { data, error } = await client.emails.send({
+        from: this.fromEmail,
+        to: [to.trim()],
+        subject,
+        text,
+        html,
+      });
+
+      if (error) {
+        console.error('[EmailService] Resend payment submission notification failed:', error.message || error);
+        return { success: false, error: error.message || String(error) };
+      }
+
+      return { success: true, messageId: data?.id || null };
+    } catch (err) {
+      console.error('[EmailService] Payment submission notification email failed:', err.message);
+      return { success: false, error: err.message };
+    }
+  }
 }
 
 export const emailService = new EmailService();
