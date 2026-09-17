@@ -1,5 +1,5 @@
 /**
- * BookUp — Login / Signup Pages
+ * CalUp — Login / Signup Pages
  */
 
 import { useState } from 'react';
@@ -214,7 +214,7 @@ export function Login() {
   };
 
   return (
-    <AuthLayout title="Welcome back" subtitle="Log in to your BookUp account">
+    <AuthLayout title="Welcome back" subtitle="Log in to your CalUp account">
       <form className="auth-form" onSubmit={handleSubmit}>
         {errorMsg && (
           <div style={{

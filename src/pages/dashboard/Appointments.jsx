@@ -1,5 +1,5 @@
 /**
- * BookUp — Appointments Page
+ * CalUp — Appointments Page
  * Redesigned high-density, Linear/Stripe-quality appointments dashboard
  * Context-aware row actions, unified multi-criteria filtering, search, sorting, and responsive cards
  */

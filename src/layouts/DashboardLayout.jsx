@@ -310,7 +310,7 @@ export default function DashboardLayout() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <BrandLogo iconOnly size="sm" to="/dashboard" />
                 <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '17px', color: 'var(--color-text)' }}>
-                  bookup.
+                  calup.
                 </span>
               </div>
               <button

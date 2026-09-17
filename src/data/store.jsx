@@ -1,5 +1,5 @@
 /**
- * BookUp — Centralized Data Store
+ * CalUp — Centralized Data Store
  * React Context + localStorage for persistent state
  */
 

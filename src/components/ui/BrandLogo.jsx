@@ -51,7 +51,7 @@ export default function BrandLogo({ size = 'md', light = false, iconOnly = false
         </svg>
       </div>
 
-      {/* Wordmark: bookup. */}
+      {/* Wordmark: calup. */}
       {!iconOnly && (
         <span
           style={{
@@ -63,7 +63,7 @@ export default function BrandLogo({ size = 'md', light = false, iconOnly = false
             lineHeight: 1,
           }}
         >
-          bookup<span style={{ color: 'var(--color-lime)' }}>.</span>
+          calup<span style={{ color: 'var(--color-lime)' }}>.</span>
         </span>
       )}
     </div>

@@ -1,5 +1,5 @@
 /**
- * BookUp — Services Management Page
+ * CalUp — Services Management Page
  * Enhanced with input validation and content quality nudges
  */
 

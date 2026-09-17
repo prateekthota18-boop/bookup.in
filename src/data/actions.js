@@ -1,5 +1,5 @@
 /**
- * BookUp — Action Types
+ * CalUp — Action Types
  * Centralized action type constants for the application state reducer.
  */
 

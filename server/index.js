@@ -90,7 +90,7 @@ app.get('/api/health', async (req, res) => {
   res.json({
     status: 'ok',
     version: 'phase4b-diagnostic-v2',
-    service: 'BookUp Backend',
+    service: 'CalUp Backend',
     uptimeSeconds: Math.floor(process.uptime()),
     googleConfigured: config.isGoogleConfigured(),
     emailConfigured: config.isEmailConfigured(),
@@ -110,7 +110,7 @@ app.get('/api/health', async (req, res) => {
 
 const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`\n==================================================`);
-  console.log(`🚀 BookUp Backend running on port ${config.port} (0.0.0.0)`);
+  console.log(`🚀 CalUp Backend running on port ${config.port} (0.0.0.0)`);
   console.log(`📅 Google OAuth Configured: ${config.isGoogleConfigured() ? 'YES ✓' : 'NO (Add credentials to .env)'}`);
   console.log(`🔗 Redirect URI: ${config.googleRedirectUri}`);
   console.log(`==================================================\n`);

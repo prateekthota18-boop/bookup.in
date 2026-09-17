@@ -3,7 +3,7 @@ import PillButton from './PillButton';
 import BrandLogo from './BrandLogo';
 
 /**
- * BookUp Application & Route Error Boundary
+ * CalUp Application & Route Error Boundary
  * Catches uncaught runtime errors in child components and displays a clean,
  * customer-friendly recovery interface instead of a silent blank screen.
  */
@@ -104,7 +104,7 @@ export default class ErrorBoundary extends React.Component {
               }}
             >
               {this.props.message ||
-                'We encountered an unexpected issue while displaying your page. Please refresh to try again, or return to BookUp.'}
+                'We encountered an unexpected issue while displaying your page. Please refresh to try again, or return to CalUp.'}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -123,7 +123,7 @@ export default class ErrorBoundary extends React.Component {
                 }}
                 style={{ width: '100%', justifyContent: 'center' }}
               >
-                Return to BookUp
+                Return to CalUp
               </PillButton>
             </div>
           </div>

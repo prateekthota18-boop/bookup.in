@@ -1,5 +1,5 @@
 /**
- * BookUp — Main Application
+ * CalUp — Main Application
  * Routing, providers, and app shell
  */
 

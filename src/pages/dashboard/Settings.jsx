@@ -1,5 +1,5 @@
 /**
- * BookUp — Settings Page
+ * CalUp — Settings Page
  * Profile, Profile Completeness, Google Calendar, WhatsApp Reminders, and Account
  */
 
@@ -492,7 +492,7 @@ export default function Settings() {
           <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, margin: 0 }}>Payment Settings</h4>
         </div>
         <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-5)' }}>
-          Set up direct UPI payments so customers can pay you directly. BookUp tracks payment verification but never handles money.
+          Set up direct UPI payments so customers can pay you directly. CalUp tracks payment verification but never handles money.
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', maxWidth: 560 }}>
@@ -569,7 +569,7 @@ export default function Settings() {
               <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, margin: 0 }}>Google Calendar Integration</h4>
             </div>
             <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', margin: 0 }}>
-              Optional 2-way sync: automatically block your Google Calendar busy times and sync BookUp bookings.
+              Optional 2-way sync: automatically block your Google Calendar busy times and sync CalUp bookings.
             </p>
           </div>
 
@@ -624,13 +624,13 @@ export default function Settings() {
           }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>✓ Real-time Sync Active</div>
             <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.6 }}>
-              <li>Every confirmed BookUp booking is created on your Google Calendar with a <code>Synced to Google Calendar</code> badge.</li>
+              <li>Every confirmed CalUp booking is created on your Google Calendar with a <code>Synced to Google Calendar</code> badge.</li>
               <li>Your personal Google Calendar busy intervals automatically block candidate booking slots on your public page.</li>
             </ul>
           </div>
         ) : (
           <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)', lineHeight: 1.5 }}>
-            No Google account required to use BookUp. Connecting your calendar is a convenience add-on to prevent overlapping commitments.
+            No Google account required to use CalUp. Connecting your calendar is a convenience add-on to prevent overlapping commitments.
           </div>
         )}
       </div>
@@ -670,7 +670,7 @@ export default function Settings() {
       <div className="card card-padding">
         <h4 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, marginBottom: 'var(--space-4)' }}>Account</h4>
         <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-4)' }}>
-          {state.auth.isDemoMode ? 'You are using BookUp in Demo Mode. All actions run locally.' : 'Manage your account settings.'}
+          {state.auth.isDemoMode ? 'You are using CalUp in Demo Mode. All actions run locally.' : 'Manage your account settings.'}
         </p>
         <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
           <button className="btn btn-secondary btn-sm" onClick={() => addToast('Password reset link sent (demo).')}>

@@ -1,4 +1,4 @@
-# BookUp (bookup-in.vercel.app) 🇮🇳
+# CalUp (calup.in) 🇮🇳
 
 > **India's Simplest Scheduling & Online Booking Platform for Solo Service Professionals.**  
 > Inspired by Calendly's simplicity, but designed around how Indian providers and customers actually communicate and pay — **WhatsApp-first, UPI-first, and mobile-first**.

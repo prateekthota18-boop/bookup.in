@@ -1,5 +1,5 @@
 /**
- * BookUp — Customer Booking Management Page (/manage/:token or /booking/:id)
+ * CalUp — Customer Booking Management Page (/manage/:token or /booking/:id)
  * Persistent public customer-management route backed by Supabase.
  * Allows customers to view confirmation, reschedule slots, and cancel with policy evaluation.
  */
@@ -184,7 +184,7 @@ export default function CustomerBooking() {
             <p style={{ color: 'var(--color-text-secondary)', maxWidth: 360, margin: '0 auto var(--space-6)' }}>
               We couldn't find an appointment matching reference <strong>{lookupIdentifier}</strong>.
             </p>
-            <button className="btn btn-primary" onClick={() => navigate('/')}>Return to BookUp</button>
+            <button className="btn btn-primary" onClick={() => navigate('/')}>Return to CalUp</button>
           </div>
         </div>
       </div>
@@ -275,7 +275,7 @@ export default function CustomerBooking() {
 
   const handleAddToCalendar = () => {
     if (!resolvedBooking) return;
-    const title = encodeURIComponent(`${resolvedBooking.serviceName || 'Session'} with ${provider?.name || 'BookUp'}`);
+    const title = encodeURIComponent(`${resolvedBooking.serviceName || 'Session'} with ${provider?.name || 'CalUp'}`);
     const details = encodeURIComponent(
       `Appointment with ${provider?.name}\nBooking reference: ${resolvedBooking.id}\nManage your booking: ${managementUrl}`
     );
@@ -413,7 +413,7 @@ export default function CustomerBooking() {
               ‹
             </Link>
             <div>
-              <div className="header-provider-name">{provider?.businessName || provider?.name || 'BookUp'}</div>
+              <div className="header-provider-name">{provider?.businessName || provider?.name || 'CalUp'}</div>
               <div className="header-step-sub">Appointment Management</div>
             </div>
           </div>

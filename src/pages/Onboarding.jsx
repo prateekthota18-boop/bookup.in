@@ -1,5 +1,5 @@
 /**
- * BookUp — Onboarding Flow
+ * CalUp — Onboarding Flow
  * 8-step wizard for new providers
  */
 
@@ -238,7 +238,7 @@ export default function Onboarding() {
   };
 
   const goToDashboard = () => {
-    addToast('Welcome to BookUp! Your booking page is live. 🎉');
+    addToast('Welcome to CalUp! Your booking page is live. 🎉');
     navigate('/dashboard');
   };
 
@@ -684,8 +684,8 @@ export default function Onboarding() {
         {/* Header */}
         <div className="onb-header">
           <Link to="/" className="landing-logo">
-            <span className="logo-icon">B</span>
-            <span className="logo-text">BookUp</span>
+            <span className="logo-icon">C</span>
+            <span className="logo-text">CalUp</span>
           </Link>
           <span className="onb-step-counter">Step {step + 1} of {TOTAL_STEPS}</span>
         </div>

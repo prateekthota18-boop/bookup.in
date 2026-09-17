@@ -1,5 +1,5 @@
 /**
- * BookUp — Policies & Deposits Page
+ * CalUp — Policies & Deposits Page
  */
 
 import { useStore, formatCurrency } from '../../data/store';

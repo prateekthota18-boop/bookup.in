@@ -117,7 +117,7 @@ export function generateIcsCalendar({
   const rawLines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//BookUp//Appointment Booking//EN',
+    'PRODID:-//CalUp//Appointment Booking//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:REQUEST',
     'BEGIN:VEVENT',

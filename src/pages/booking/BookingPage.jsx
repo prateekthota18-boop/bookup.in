@@ -189,7 +189,7 @@ export default function PublicBookingPage() {
             The booking link <strong>/book/{slug}</strong> doesn't exist or hasn't been configured yet.
           </p>
           <PillButton variant="primary" onClick={() => navigate('/')}>
-            Go to BookUp
+            Go to CalUp
           </PillButton>
         </div>
       </div>
@@ -327,7 +327,7 @@ export default function PublicBookingPage() {
         depositStatus: 'na',
         paymentStatus: (authoritativePrice || 0) > 0 ? 'awaiting_payment' : 'not_required',
         status: 'confirmed',
-        source: 'BookUp booking page',
+        source: 'CalUp booking page',
         notes: customerInfo.notes || '',
         managementToken,
         managementUrl,
@@ -708,7 +708,7 @@ export default function PublicBookingPage() {
           )}
 
           <div className="booking-powered-by">
-            Powered by <strong>bookup.</strong>
+            Powered by <strong>calup.</strong>
           </div>
         </footer>
       </div>

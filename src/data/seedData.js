@@ -1,5 +1,5 @@
 /**
- * BookUp — Seed Data
+ * CalUp — Seed Data
  * Realistic demo data for the prototype
  */
 
@@ -176,7 +176,7 @@ function generateBookings() {
       depositAmount: b.service.depositAmount,
       depositStatus: b.depositStatus,
       status: b.status,
-      source: 'BookUp booking page',
+      source: 'CalUp booking page',
       notes: '',
       createdAt: new Date(b.date.getTime() - 86400000 * 2).toISOString(),
     });

@@ -10,7 +10,7 @@ const PARTNERS = ['Layers', 'Intercom', 'Segment', 'Notion', 'Linear', 'Vercel',
 
 const TESTIMONIALS = [
   {
-    quote: "BookUp feels friendly and lightweight. It didn't need a tutorial and my clients love it.",
+    quote: "CalUp feels friendly and lightweight. It didn't need a tutorial and my clients love it.",
     author: "Nina Linda",
     role: "Yoga Studio Owner",
     bg: "lime-soft",
@@ -156,7 +156,7 @@ export default function Landing() {
                 <span className="device-dot red" />
                 <span className="device-dot yellow" />
                 <span className="device-dot green" />
-                <span className="device-address">bookup-in.vercel.app/dashboard</span>
+                <span className="device-address">calup.in/dashboard</span>
               </div>
               <div className="device-screen-content">
                 {/* Mini Dashboard representation */}
@@ -328,7 +328,7 @@ export default function Landing() {
           <div className="trust-card">
             <div className="trust-quote-col">
               <p className="trust-quote">
-                “Before using BookUp, we struggled with missed appointments and chaotic back-and-forth messaging.
+                “Before using CalUp, we struggled with missed appointments and chaotic back-and-forth messaging.
                 Now clients book instantly through one link, and our schedule stays 100% full.”
               </p>
               <div className="trust-author">
@@ -377,7 +377,7 @@ export default function Landing() {
             <h2>
               Loved by Professionals Everywhere
             </h2>
-            <p>Here is what service business owners say about using BookUp.</p>
+            <p>Here is what service business owners say about using CalUp.</p>
           </div>
 
           <div className="testimonial-grid">
@@ -402,7 +402,7 @@ export default function Landing() {
         <div className="container">
           <div className="section-title-wrap text-center">
             <h2>
-              Latest from <em className="headline-accent">BookUp</em>
+              Latest from <em className="headline-accent">CalUp</em>
             </h2>
             <p>Product improvements and guides to help your service business thrive.</p>
           </div>
@@ -432,7 +432,7 @@ export default function Landing() {
             </h2>
             <p>Set up your booking page in 3 minutes. Share one link and get booked today.</p>
             <PillButton variant="primary" size="lg" arrow onClick={handleStartTrial}>
-              Get Started with BookUp
+              Get Started with CalUp
             </PillButton>
           </div>
         </div>
@@ -462,12 +462,12 @@ export default function Landing() {
               <a href="#about">About</a>
               <a href="#testimonials">Reviews</a>
               <a href="#articles">Blog</a>
-              <a href="mailto:support@bookup.work.gd">Contact Support</a>
+              <a href="mailto:support@calup.in">Contact Support</a>
             </div>
           </div>
 
           <div className="footer-bottom-row">
-            <p>© {new Date().getFullYear()} BookUp Technologies. All rights reserved.</p>
+            <p>© {new Date().getFullYear()} CalUp Technologies. All rights reserved.</p>
             <div className="footer-legal">
               <a href="#">Privacy Policy</a>
               <a href="#">Terms of Service</a>

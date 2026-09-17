@@ -1,5 +1,5 @@
 /**
- * BookUp — Availability Page
+ * CalUp — Availability Page
  * Weekly schedule, dynamic buffers, and external calendar busy times
  */
 

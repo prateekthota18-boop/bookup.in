@@ -1,5 +1,5 @@
 /**
- * BookUp — Email Notification Service (Phase 4b / Resend Migration)
+ * CalUp — Email Notification Service (Phase 4b / Resend Migration)
  * Production HTTPS-based email delivery via Resend API (https://resend.com) for:
  * 1. Customer booking confirmations (with attached RFC 5545 .ics invite)
  * 2. Provider new-booking notifications
@@ -27,7 +27,7 @@ export class EmailService {
   }
 
   get fromEmail() {
-    return this._fromEmail !== null ? this._fromEmail : (process.env.RESEND_FROM_EMAIL || config.resendFromEmail || 'BookUp <bookings@bookup.work.gd>');
+    return this._fromEmail !== null ? this._fromEmail : (process.env.RESEND_FROM_EMAIL || config.resendFromEmail || 'CalUp <bookings@calup.in>');
   }
 
   isConfigured() {
@@ -115,7 +115,7 @@ export class EmailService {
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 32px 16px; color: #1e293b;">
           <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
             <div style="display: flex; align-items: center; margin-bottom: 24px;">
-              <span style="font-size: 20px; font-weight: 700; color: #0f172a; letter-spacing: -0.5px;">BookUp</span>
+              <span style="font-size: 20px; font-weight: 700; color: #0f172a; letter-spacing: -0.5px;">CalUp</span>
             </div>
             
             <h1 style="font-size: 22px; font-weight: 700; color: #0f172a; margin: 0 0 12px;">You're booked!</h1>
@@ -254,7 +254,7 @@ A calendar invite (.ics) has been attached to this email.
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 32px 16px; color: #1e293b;">
           <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
             <div style="margin-bottom: 20px;">
-              <span style="font-size: 18px; font-weight: 700; color: #0f172a;">BookUp</span>
+              <span style="font-size: 18px; font-weight: 700; color: #0f172a;">CalUp</span>
             </div>
             
             <h1 style="font-size: 20px; font-weight: 700; color: #0f172a; margin: 0 0 8px;">New Appointment Booked</h1>
@@ -389,7 +389,7 @@ ${meetLink ? `Google Meet Link: ${meetLink}` : ''}
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 32px 16px; color: #1e293b;">
           <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
             <div style="display: flex; align-items: center; margin-bottom: 24px;">
-              <span style="font-size: 20px; font-weight: 700; color: #0f172a; letter-spacing: -0.5px;">BookUp</span>
+              <span style="font-size: 20px; font-weight: 700; color: #0f172a; letter-spacing: -0.5px;">CalUp</span>
             </div>
             
             <h1 style="font-size: 22px; font-weight: 700; color: #0f172a; margin: 0 0 12px;">Upcoming Session Reminder</h1>
@@ -523,12 +523,12 @@ ${managementUrl ? `- Manage Appointment: ${managementUrl}` : ''}
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 32px 16px; color: #1e293b;">
           <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
             <div style="margin-bottom: 20px;">
-              <span style="font-size: 18px; font-weight: 700; color: #0f172a;">BookUp</span>
+              <span style="font-size: 18px; font-weight: 700; color: #0f172a;">CalUp</span>
             </div>
             
             <h1 style="font-size: 20px; font-weight: 700; color: #166534; margin: 0 0 8px;">💳 Payment Details Submitted</h1>
             <p style="font-size: 15px; color: #334155; margin: 0 0 20px;">
-              Hi ${providerName || 'Coach'}, <strong>${customerName}</strong> has submitted payment details for their upcoming session. Please verify the payment in your UPI app and confirm or reject it in your BookUp dashboard.
+              Hi ${providerName || 'Coach'}, <strong>${customerName}</strong> has submitted payment details for their upcoming session. Please verify the payment in your UPI app and confirm or reject it in your CalUp dashboard.
             </p>
 
             <div style="background-color: #f1f5f9; border-radius: 8px; padding: 18px 20px; margin: 20px 0;">

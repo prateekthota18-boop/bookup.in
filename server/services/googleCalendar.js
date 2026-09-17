@@ -269,9 +269,9 @@ export const googleCalendarService = {
     const startDateTime = `${booking.date}T${booking.startTime}:00${offset}`;
     const endDateTime = `${booking.date}T${booking.endTime}:00${offset}`;
 
-    const summary = `${booking.serviceName} — ${booking.customerName} (BookUp)`;
+    const summary = `${booking.serviceName} — ${booking.customerName} (CalUp)`;
     const description = [
-      `BookUp Appointment`,
+      `CalUp Appointment`,
       `Service: ${booking.serviceName} (${booking.duration} mins)`,
       `Client: ${booking.customerName}`,
       `Phone: ${booking.customerPhone}`,

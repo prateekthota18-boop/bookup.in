@@ -1,5 +1,5 @@
 /**
- * BookUp — Booking Page Management
+ * CalUp — Booking Page Management
  */
 
 import { useState } from 'react';
@@ -368,7 +368,7 @@ export default function BookingPageManagement() {
               gap: '6px',
             }}>
               <span style={{ fontSize: '11px', color: 'var(--theme-text-muted)', fontWeight: 500 }}>
-                powered by <strong>bookup.</strong>
+                powered by <strong>calup.</strong>
               </span>
             </div>
           </div>

@@ -1,5 +1,5 @@
 /**
- * BookUp — Analytics Page
+ * CalUp — Analytics Page
  */
 
 import { useEffect, useRef } from 'react';
