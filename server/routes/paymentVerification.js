@@ -1,13 +1,13 @@
 /**
- * BookUp — Payment Verification Routes
+ * Calup — Payment Verification Routes
  *
  * Endpoints for the manual "pay-the-coach-directly" flow:
  * - POST /api/public/bookings/manage/:token/mark-paid    (customer, token-authed)
  * - POST /api/bookings/:id/confirm-payment               (provider-authed)
  * - POST /api/bookings/:id/reject-payment                (provider-authed)
  *
- * BookUp never touches money. Coach and customer settle payment directly (UPI).
- * BookUp only tracks the verification state as metadata on top of existing
+ * Calup never touches money. Coach and customer settle payment directly (UPI).
+ * Calup only tracks the verification state as metadata on top of existing
  * atomic slot reservations.
  *
  * Security:
@@ -25,6 +25,8 @@ import { config } from '../config.js';
 import { requireProviderAuth, serviceRoleClient } from '../middleware/auth.js';
 import { richAutomateService } from '../services/richAutomate.js';
 import { emailService } from '../services/email.js';
+import { googleCalendarService } from '../services/googleCalendar.js';
+import { decryptToken } from '../utils/crypto.js';
 
 const router = Router();
 
@@ -192,7 +194,7 @@ router.post('/:token/mark-paid', upload.single('screenshot'), async (req, res) =
     const providerName = booking.providers?.name || booking.providers?.business_name || 'Coach';
     const serviceName = booking.services?.name || booking.service_name || 'Session';
     const amount = booking.price || booking.services?.price || 0;
-    const frontendBase = (config.frontendUrl || 'https://bookup-in.vercel.app').replace(/\/$/, '');
+    const frontendBase = (config.frontendUrl || 'https://calup-in.vercel.app').replace(/\/$/, '');
     const dashboardUrl = `${frontendBase}/dashboard/appointments`;
 
     if (providerEmail) {
@@ -208,8 +210,12 @@ router.post('/:token/mark-paid', upload.single('screenshot'), async (req, res) =
         amount,
         screenshotUrl,
         dashboardUrl,
+      }).then((emailRes) => {
+        if (!emailRes?.success && !emailRes?.skipped) {
+          console.error(`[PaymentVerification] Failed to send payment submitted email. Provider: "${providerName}", Recipient: "${providerEmail}", Error: ${emailRes?.error || 'Unknown error'}`);
+        }
       }).catch(mailErr => {
-        console.warn('[PaymentVerification] Non-blocking provider payment email warning:', mailErr.message);
+        console.error(`[PaymentVerification] Payment submitted email threw exception. Provider: "${providerName}", Recipient: "${providerEmail}", Error: ${mailErr.message || mailErr}`);
       });
     }
 
@@ -310,46 +316,153 @@ router.post('/:id/confirm-payment', requireProviderAuth, async (req, res) => {
       console.warn('[PaymentVerification] Non-blocking: could not enrich booking with provider/service data');
     }
 
-    // Non-blocking WhatsApp confirmation notification to customer
-    try {
-      if (booking.customer_whatsapp || booking.customer_phone) {
-        await richAutomateService.sendCustomerConfirmation({
-          phone: booking.customer_whatsapp || booking.customer_phone,
-          customerName: booking.customer_name || 'Valued Customer',
-          serviceName: service.name || 'Session',
-          providerName: provider.name || provider.business_name || 'Coach',
-          bookingDate: booking.booking_date,
+    const providerName = provider.name || provider.business_name || 'Coach';
+    const serviceName = service.name || 'Session';
+    let meetLink = booking.meet_link || null;
+    let googleEventId = booking.google_event_id || null;
+
+    // 1. Google Calendar Event Creation: Create event if not already created
+    if (!googleEventId) {
+      try {
+        const [startH, startM] = (booking.start_time || '00:00').split(':').map(Number);
+        const durationMins = Number(booking.duration) || 60;
+        const totalMins = (startH || 0) * 60 + (startM || 0) + durationMins;
+        const calcEndH = String(Math.floor(totalMins / 60) % 24).padStart(2, '0');
+        const calcEndM = String(totalMins % 60).padStart(2, '0');
+        const endTime = booking.end_time || `${calcEndH}:${calcEndM}`;
+
+        const gcalBooking = {
+          id: booking.id,
+          date: booking.booking_date,
           startTime: booking.start_time,
-          duration: booking.duration,
-          managementUrl: '',
-        });
+          endTime,
+          duration: durationMins,
+          serviceName,
+          customerName: booking.customer_name || 'Client',
+          customerEmail: booking.customer_email || '',
+          customerPhone: booking.customer_phone || '',
+          price: booking.price || 0,
+          notes: booking.notes || '',
+        };
+
+        const gcalProviderId = booking.provider_id || providerId;
+        const gcalRes = await googleCalendarService.createEvent(
+          gcalProviderId,
+          gcalBooking,
+          provider.timezone || 'Asia/Kolkata'
+        );
+
+        if (gcalRes?.success && gcalRes.eventId) {
+          googleEventId = gcalRes.eventId;
+          meetLink = gcalRes.meetLink || meetLink;
+
+          const calUpdate = { google_event_id: googleEventId };
+          if (meetLink) calUpdate.meet_link = meetLink;
+          try {
+            await supabase.from('bookings').update(calUpdate).eq('id', bookingId);
+          } catch (_e) {
+            console.warn('[PaymentVerification] Could not persist google_event_id/meet_link to bookings:', _e.message);
+          }
+        } else if (!gcalRes?.success) {
+          console.error(`[PaymentVerification] Google Calendar event creation failed. Provider: "${providerName}" (${gcalProviderId}), Recipient: "${booking.customer_name}" (${booking.customer_email || 'no email'}), Error: ${gcalRes?.error || gcalRes?.reason || 'Unknown calendar error'}`);
+        }
+      } catch (gcalErr) {
+        console.error(`[PaymentVerification] Google Calendar event creation exception. Provider: "${providerName}" (${providerId}), Recipient: "${booking.customer_name}" (${booking.customer_email || 'no email'}), Error: ${gcalErr.message || gcalErr}`);
       }
-    } catch (waErr) {
-      // WhatsApp failure must not fail this request
-      console.warn('[PaymentVerification] WhatsApp notification non-blocking error:', waErr.message);
     }
 
-    // Non-blocking email confirmation notification to customer
+    // 2. Decrypt management token if available to construct customer management URL
+    const frontendBase = (config.frontendUrl || 'https://calup-in.vercel.app').replace(/\/$/, '');
+    let managementUrl = '';
+    if (booking.management_token_encrypted) {
+      try {
+        const rawToken = decryptToken(booking.management_token_encrypted);
+        if (rawToken) {
+          managementUrl = `${frontendBase}/manage/${encodeURIComponent(rawToken)}`;
+        }
+      } catch (_decErr) {
+        // Non-blocking fallback
+      }
+    }
+
+    // 3. Non-blocking WhatsApp confirmation notification to customer
+    const waRecipient = booking.customer_whatsapp || booking.customer_phone;
     try {
-      if (booking.customer_email) {
-        const frontendBase = (config.frontendUrl || 'https://bookup-in.vercel.app').replace(/\/$/, '');
-        await emailService.sendCustomerConfirmationEmail({
-          to: booking.customer_email,
+      if (waRecipient) {
+        const waRes = await richAutomateService.sendCustomerConfirmation({
+          phone: waRecipient,
           customerName: booking.customer_name || 'Valued Customer',
-          serviceName: service.name || 'Session',
-          providerName: provider.name || provider.business_name || 'Coach',
+          serviceName,
+          providerName,
           bookingDate: booking.booking_date,
           startTime: booking.start_time,
           duration: booking.duration,
-          meetLink: booking.meet_link || null,
-          managementUrl: '',
+          managementUrl,
+        });
+        if (!waRes?.success && !waRes?.skipped) {
+          console.error(`[PaymentVerification] WhatsApp confirmation notification failed. Provider: "${providerName}", Recipient: "${waRecipient}", Error: ${waRes?.error || 'Unknown error'}`);
+        }
+      }
+    } catch (waErr) {
+      console.error(`[PaymentVerification] WhatsApp confirmation notification exception. Provider: "${providerName}", Recipient: "${waRecipient}", Error: ${waErr.message || waErr}`);
+    }
+
+    // 4. Non-blocking email confirmation notification to customer (with .ics attachment and Meet link)
+    try {
+      if (booking.customer_email) {
+        const emailRes = await emailService.sendCustomerConfirmationEmail({
+          to: booking.customer_email,
+          customerName: booking.customer_name || 'Valued Customer',
+          serviceName,
+          providerName,
+          bookingDate: booking.booking_date,
+          startTime: booking.start_time,
+          duration: booking.duration,
+          meetLink: meetLink || booking.meet_link || null,
+          managementUrl,
           bookingId: booking.id,
           timeZone: provider.timezone || 'Asia/Kolkata',
         });
+
+        if (!emailRes?.success && !emailRes?.skipped) {
+          console.error(`[PaymentVerification] Customer confirmation email failed. Provider: "${providerName}", Recipient: "${booking.customer_email}", Error: ${emailRes?.error || 'Unknown email failure'}`);
+        } else if (emailRes?.success) {
+          // Record sent timestamp
+          try {
+            await supabase.from('bookings').update({
+              customer_confirmation_email_sent_at: new Date().toISOString(),
+              customer_confirmation_email_msg_id: emailRes.messageId || null,
+            }).eq('id', bookingId);
+          } catch (_e) {}
+        }
       }
     } catch (emailErr) {
-      // Email failure must not fail this request
-      console.warn('[PaymentVerification] Email notification non-blocking error:', emailErr.message);
+      console.error(`[PaymentVerification] Customer confirmation email exception. Provider: "${providerName}", Recipient: "${booking.customer_email}", Error: ${emailErr.message || emailErr}`);
+    }
+
+    // 5. Non-blocking email confirmation notification to coach (with client details and Meet link)
+    const coachEmail = provider.email || booking.providers?.email;
+    if (coachEmail) {
+      try {
+        const coachEmailRes = await emailService.sendCoachBookingConfirmedEmail({
+          to: coachEmail,
+          providerName,
+          customerName: booking.customer_name || 'Client',
+          customerEmail: booking.customer_email || '',
+          customerPhone: booking.customer_phone || '',
+          serviceName,
+          bookingDate: booking.booking_date,
+          startTime: booking.start_time,
+          duration: booking.duration,
+          meetLink: meetLink || booking.meet_link || null,
+        });
+
+        if (!coachEmailRes?.success && !coachEmailRes?.skipped) {
+          console.error(`[PaymentVerification] Coach confirmation email failed. Provider: "${providerName}", Recipient: "${coachEmail}", Error: ${coachEmailRes?.error || 'Unknown email failure'}`);
+        }
+      } catch (coachEmailErr) {
+        console.error(`[PaymentVerification] Coach confirmation email exception. Provider: "${providerName}", Recipient: "${coachEmail}", Error: ${coachEmailErr.message || coachEmailErr}`);
+      }
     }
 
     return res.json({
@@ -381,9 +494,7 @@ router.post('/:id/reject-payment', requireProviderAuth, async (req, res) => {
     return res.status(400).json({ success: false, error: 'Booking ID is required' });
   }
 
-  if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
-    return res.status(400).json({ success: false, error: 'A reason for rejection is required.' });
-  }
+  const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
 
   const supabase = getSupabaseClient();
   if (!supabase) {
@@ -410,8 +521,8 @@ router.post('/:id/reject-payment', requireProviderAuth, async (req, res) => {
       });
     }
 
-    // Guard: only allowed from 'verification_pending'
-    if (booking.payment_status !== 'verification_pending') {
+    // Guard: allowed from 'verification_pending' or 'awaiting_payment'
+    if (!['verification_pending', 'awaiting_payment'].includes(booking.payment_status)) {
       return res.status(400).json({
         success: false,
         error: `Payment cannot be rejected. Current payment status: ${booking.payment_status}`,
@@ -426,7 +537,7 @@ router.post('/:id/reject-payment', requireProviderAuth, async (req, res) => {
       .update({
         payment_status: 'rejected',
         payment_rejected_at: new Date().toISOString(),
-        payment_rejected_reason: reason.trim(),
+        payment_rejected_reason: trimmedReason || null,
         status: 'cancelled',
         updated_at: new Date().toISOString(),
       })
@@ -437,7 +548,60 @@ router.post('/:id/reject-payment', requireProviderAuth, async (req, res) => {
       throw updateErr;
     }
 
-    console.log(`[PaymentVerification] Booking ${bookingId} payment rejected by provider ${providerId}. Reason: ${reason.trim()}. Slot freed.`);
+    console.log(`[PaymentVerification] Booking ${bookingId} payment rejected by provider ${providerId}. Reason: "${trimmedReason}". Slot freed.`);
+
+    // Fetch related provider/service data for rejection notification (non-blocking)
+    let provider = {};
+    let service = {};
+    try {
+      const { data: enriched } = await supabase
+        .from('bookings')
+        .select('services (name), providers (name, business_name, phone, whatsapp, email)')
+        .eq('id', bookingId)
+        .maybeSingle();
+      if (enriched) {
+        provider = enriched.providers || {};
+        service = enriched.services || {};
+      }
+    } catch (_e) {
+      console.warn('[PaymentVerification] Non-blocking: could not enrich booking for reject-payment');
+    }
+
+    const providerName = provider.name || provider.business_name || 'Coach';
+    const serviceName = service.name || booking.service_name || 'Session';
+
+    // Delete Google Calendar event if one exists
+    if (booking.google_event_id) {
+      try {
+        await googleCalendarService.deleteEvent(booking.provider_id || providerId, booking.google_event_id);
+      } catch (delErr) {
+        console.warn('[PaymentVerification] Non-blocking: calendar delete event warning upon rejection:', delErr.message);
+      }
+    }
+
+    // Send customer rejection email
+    if (booking.customer_email) {
+      try {
+        const rejectEmailRes = await emailService.sendPaymentRejectedEmailToCustomer({
+          to: booking.customer_email,
+          customerName: booking.customer_name || 'Valued Customer',
+          serviceName,
+          providerName,
+          bookingDate: booking.booking_date,
+          startTime: booking.start_time,
+          providerEmail: provider.email || '',
+          providerPhone: provider.phone || '',
+          providerWhatsApp: provider.whatsapp || provider.phone || '',
+          reason: trimmedReason,
+        });
+
+        if (!rejectEmailRes?.success && !rejectEmailRes?.skipped) {
+          console.error(`[PaymentVerification] Payment rejection email failed. Provider: "${providerName}", Recipient: "${booking.customer_email}", Error: ${rejectEmailRes?.error || 'Unknown email failure'}`);
+        }
+      } catch (emailErr) {
+        console.error(`[PaymentVerification] Payment rejection email exception. Provider: "${providerName}", Recipient: "${booking.customer_email}", Error: ${emailErr.message || emailErr}`);
+      }
+    }
 
     return res.json({
       success: true,
@@ -446,7 +610,7 @@ router.post('/:id/reject-payment', requireProviderAuth, async (req, res) => {
         id: bookingId,
         paymentStatus: 'rejected',
         paymentRejectedAt: new Date().toISOString(),
-        paymentRejectedReason: reason.trim(),
+        paymentRejectedReason: trimmedReason || null,
         status: 'cancelled',
       },
     });

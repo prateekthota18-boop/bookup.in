@@ -1,16 +1,16 @@
 /**
- * BookUp — App & Public URL Resolution Utility
+ * Calup — App & Public URL Resolution Utility
  * Reads VITE_APP_URL environment variable if set,
- * or falls back to production URL https://bookup-in.vercel.app.
+ * or falls back to production URL https://calup-in.vercel.app.
  */
 
-export const DEFAULT_APP_URL = 'https://bookup-in.vercel.app';
+export const DEFAULT_APP_URL = 'https://calup-in.vercel.app';
 
 /**
- * Returns the resolved base application URL (e.g. "https://bookup-in.vercel.app").
+ * Returns the resolved base application URL (e.g. "https://calup-in.vercel.app").
  * Priority:
  * 1. import.meta.env.VITE_APP_URL (if defined and non-empty)
- * 2. DEFAULT_APP_URL ("https://bookup-in.vercel.app")
+ * 2. DEFAULT_APP_URL ("https://calup-in.vercel.app")
  */
 export function getAppBaseUrl() {
   let envUrl = '';
@@ -30,7 +30,7 @@ export function getAppBaseUrl() {
 
 /**
  * Returns the full absolute public booking URL for a provider slug.
- * e.g. "https://bookup-in.vercel.app/book/yourslovely"
+ * e.g. "https://calup-in.vercel.app/book/yourslovely"
  */
 export function getBookingUrl(slug) {
   const base = getAppBaseUrl();
@@ -40,7 +40,7 @@ export function getBookingUrl(slug) {
 
 /**
  * Returns the display version of booking URL without protocol.
- * e.g. "bookup-in.vercel.app/book/yourslovely"
+ * e.g. "calup-in.vercel.app/book/yourslovely"
  */
 export function getBookingDisplayUrl(slug) {
   const full = getBookingUrl(slug);
@@ -49,7 +49,7 @@ export function getBookingDisplayUrl(slug) {
 
 /**
  * Returns the customer management URL for a raw token.
- * e.g. "https://bookup-in.vercel.app/manage/c8a9f..."
+ * e.g. "https://calup-in.vercel.app/manage/c8a9f..."
  */
 export function getCustomerManagementUrl(token) {
   const base = getAppBaseUrl();

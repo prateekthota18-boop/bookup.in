@@ -41,7 +41,7 @@ export class MockWhatsAppProvider extends NotificationProvider {
       managementUrl ||
       booking.managementUrl ||
       (booking.managementToken
-        ? (typeof window !== 'undefined' ? `${window.location.origin}/manage/${booking.managementToken}` : `https://bookup-in.vercel.app/manage/${booking.managementToken}`)
+        ? (typeof window !== 'undefined' ? `${window.location.origin}/manage/${booking.managementToken}` : `https://calup-in.vercel.app/manage/${booking.managementToken}`)
         : '');
 
     const manageSection = manageLink
@@ -58,7 +58,7 @@ export class MockWhatsAppProvider extends NotificationProvider {
     const dateFormatted = this.formatDateIndian(booking.date);
     const refundNote = '';
 
-    return `Hi ${custName},\n\nYour ${svcName} with ${provName} scheduled for ${dateFormatted} has been cancelled.${refundNote}\n\nYou can book another session anytime at ${provider?.slug ? `https://bookup-in.vercel.app/book/${provider.slug}` : 'our booking page'}.`;
+    return `Hi ${custName},\n\nYour ${svcName} with ${provName} scheduled for ${dateFormatted} has been cancelled.${refundNote}\n\nYou can book another session anytime at ${provider?.slug ? `https://calup-in.vercel.app/book/${provider.slug}` : 'our booking page'}.`;
   }
 
   generateRescheduleMessage(booking, provider) {

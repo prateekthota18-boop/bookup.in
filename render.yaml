@@ -23,3 +23,11 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: RICH_AUTOMATE_API_KEY
+        sync: false
+      - key: INTERNAL_CRON_SECRET
+        sync: false

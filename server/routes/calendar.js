@@ -123,9 +123,13 @@ router.post('/events', async (req, res) => {
       }
     }
 
+    if (!result.success) {
+      console.error(`[CalendarRoutes] Google Calendar event creation failed. Provider: "${providerId}", Recipient: "${booking?.customerEmail || booking?.customerName || 'N/A'}", Error: ${result.error || result.reason || 'Unknown error'}`);
+    }
+
     res.json(result);
   } catch (err) {
-    console.error('Error creating Google Calendar event:', err.message);
+    console.error(`[CalendarRoutes] Error creating Google Calendar event. Provider: "${providerId}", Recipient: "${booking?.customerEmail || booking?.customerName || 'N/A'}", Error: ${err.message || err}`);
     res.status(500).json({ success: false, error: err.message });
   }
 });

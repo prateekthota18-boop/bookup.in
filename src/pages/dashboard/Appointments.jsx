@@ -369,21 +369,19 @@ export default function Appointments() {
   };
 
   const handleConfirmRejectPayment = async () => {
-    if (!rejectModalBooking || !rejectReason.trim()) return;
+    if (!rejectModalBooking) return;
     const booking = rejectModalBooking;
     setProcessingPaymentId(booking.id);
     try {
       if (!state.auth?.isDemoMode && isSupabaseConfigured() && booking.id && !booking.id.startsWith('booking-')) {
-        try {
-          await dbService.rejectPayment(booking.id, rejectReason.trim());
-        } catch (apiErr) {
-          console.warn('[Appointments] Backend rejectPayment API notice:', apiErr.message);
-        }
+        await dbService.rejectPayment(booking.id, rejectReason.trim());
       }
 
       if (state.googleCalendar?.isConnected && booking.googleEventId) {
         const providerId = state.provider?.id || 'provider-1';
-        realGoogleCalendarService.deleteEvent(booking.googleEventId, providerId);
+        try {
+          realGoogleCalendarService.deleteEvent(booking.googleEventId, providerId);
+        } catch (_) {}
       }
 
       dispatch({
@@ -392,12 +390,24 @@ export default function Appointments() {
           id: booking.id,
           paymentStatus: 'rejected',
           paymentRejectedAt: new Date().toISOString(),
-          paymentRejectedReason: rejectReason.trim(),
+          paymentRejectedReason: rejectReason.trim() || null,
           status: 'cancelled',
         },
       });
 
-      addToast(`Payment rejected for ${booking.customerName}. Slot freed.`);
+      // Refresh bookings list from Supabase if available
+      if (!state.auth?.isDemoMode && isSupabaseConfigured() && state.provider?.id) {
+        try {
+          const fresh = await dbService.getBookings(state.provider.id);
+          if (Array.isArray(fresh) && fresh.length > 0) {
+            fresh.forEach(freshBooking => {
+              dispatch({ type: ACTIONS.UPDATE_BOOKING, payload: freshBooking });
+            });
+          }
+        } catch (_) {}
+      }
+
+      addToast('Payment rejected, customer notified');
       setRejectModalBooking(null);
       setRejectReason('');
       if (selectedBooking === booking.id) {
@@ -2103,16 +2113,16 @@ export default function Appointments() {
                 </p>
 
                 <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600 }}>Reason for Rejection *</label>
+                  <label className="form-label" style={{ fontWeight: 600 }}>Reason for Rejection (Optional)</label>
                   <textarea
                     className="form-input"
                     rows={3}
-                    placeholder="e.g., Payment not received in UPI account, incorrect reference ID, amount mismatch..."
+                    placeholder="e.g., Payment not received in UPI account, incorrect reference ID, amount mismatch... (optional)"
                     value={rejectReason}
                     onChange={e => setRejectReason(e.target.value)}
                     disabled={processingPaymentId === rejectModalBooking.id}
                   />
-                  <span className="form-hint">This explanation will be visible to the customer on their booking status page.</span>
+                  <span className="form-hint">Optional. If provided, this reason will be included in the email sent to the customer.</span>
                 </div>
               </div>
               <div className="modal-footer">
@@ -2128,7 +2138,7 @@ export default function Appointments() {
                   type="button"
                   className="btn btn-danger"
                   onClick={handleConfirmRejectPayment}
-                  disabled={processingPaymentId === rejectModalBooking.id || !rejectReason.trim()}
+                  disabled={processingPaymentId === rejectModalBooking.id}
                 >
                   {processingPaymentId === rejectModalBooking.id ? 'Rejecting...' : 'Reject Payment & Free Slot'}
                 </button>

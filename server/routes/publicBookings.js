@@ -400,14 +400,16 @@ async function handleCreateBooking(req, res) {
             // Non-fatal if google_event_id column is pending migration
           }
         }
+      } else if (!gcalRes?.success) {
+        console.error(`[PublicBookings] Google Calendar event creation failed. Provider: "${provider.name || provider.business_name || providerId}", Recipient: "${insertPayload.customer_name}" (${insertPayload.customer_email || 'no-email'}), Error: ${gcalRes?.error || gcalRes?.reason || 'Unknown error'}`);
       }
     } catch (gcalErr) {
       // Non-blocking: Meet link generation failure must NEVER cancel, block, or roll back a booking
-      console.warn('[PublicBookings] Google Calendar/Meet link generation non-blocking error:', gcalErr.message);
+      console.error(`[PublicBookings] Google Calendar exception. Provider: "${provider.name || provider.business_name || providerId}", Recipient: "${insertPayload.customer_name}" (${insertPayload.customer_email || 'no-email'}), Error: ${gcalErr.message || gcalErr}`);
     }
 
     // 8. SYNCHRONOUS SERVER-SIDE EMAIL NOTIFICATIONS (PRIMARY CHANNEL - Phase 4b)
-    const frontendBase = (config.frontendUrl || 'https://bookup-in.vercel.app').replace(/\/$/, '');
+    const frontendBase = (config.frontendUrl || 'https://calup-in.vercel.app').replace(/\/$/, '');
     const managementUrl = `${frontendBase}/manage/${encodeURIComponent(rawToken)}`;
 
     let customerEmailMsgId = null;
@@ -418,7 +420,7 @@ async function handleCreateBooking(req, res) {
     try {
       const [customerEmailSend, providerEmailSend] = await Promise.allSettled([
         insertPayload.customer_email
-          ? emailService.sendCustomerConfirmationEmail({
+          ? emailService.sendCustomerBookingPendingEmail({
               to: insertPayload.customer_email,
               customerName: insertPayload.customer_name,
               serviceName: service.name,
@@ -426,14 +428,10 @@ async function handleCreateBooking(req, res) {
               bookingDate,
               startTime,
               duration,
-              meetLink,
-              managementUrl,
-              bookingId: newBooking.id,
-              timeZone: provider.timezone || 'Asia/Kolkata',
             })
           : Promise.resolve({ success: false, skipped: true, error: 'Customer email not provided' }),
         provider.email
-          ? emailService.sendProviderNotificationEmail({
+          ? emailService.sendCoachBookingAwaitingPaymentEmail({
               to: provider.email,
               providerName: provider.name || provider.business_name || 'Coach',
               customerName: insertPayload.customer_name,
@@ -443,7 +441,7 @@ async function handleCreateBooking(req, res) {
               bookingDate,
               startTime,
               duration,
-              meetLink,
+              amount: insertPayload.price || 0,
             })
           : Promise.resolve({ success: false, skipped: true, error: 'Provider email not configured' }),
       ]);
@@ -452,14 +450,22 @@ async function handleCreateBooking(req, res) {
         customerEmailMsgId = customerEmailSend.value.messageId || null;
       } else if (customerEmailSend.status === 'fulfilled') {
         customerEmailError = customerEmailSend.value?.error || null;
+        if (!customerEmailSend.value?.skipped) {
+          console.error(`[PublicBookings] Customer booking pending email failed. Provider: "${provider.name || provider.business_name || providerId}", Recipient: "${insertPayload.customer_email}", Error: ${customerEmailError}`);
+        }
       } else {
-        customerEmailError = customerEmailSend.reason?.message || 'Customer confirmation email dispatch failed';
+        customerEmailError = customerEmailSend.reason?.message || 'Customer booking pending email dispatch failed';
+        console.error(`[PublicBookings] Customer booking pending email exception. Provider: "${provider.name || provider.business_name || providerId}", Recipient: "${insertPayload.customer_email}", Error: ${customerEmailError}`);
       }
 
       if (providerEmailSend.status === 'fulfilled' && providerEmailSend.value?.success) {
         providerEmailMsgId = providerEmailSend.value.messageId || null;
       } else if (providerEmailSend.status === 'fulfilled' && !providerEmailSend.value?.skipped) {
         providerEmailError = providerEmailSend.value?.error || null;
+        console.error(`[PublicBookings] Coach awaiting payment email failed. Provider: "${provider.name || provider.business_name || providerId}", Recipient: "${provider.email}", Error: ${providerEmailError}`);
+      } else if (providerEmailSend.status === 'rejected') {
+        providerEmailError = providerEmailSend.reason?.message || 'Coach awaiting payment email dispatch failed';
+        console.error(`[PublicBookings] Coach awaiting payment email exception. Provider: "${provider.name || provider.business_name || providerId}", Recipient: "${provider.email}", Error: ${providerEmailError}`);
       }
 
       // Record email dispatch results in Supabase
@@ -610,7 +616,7 @@ router.get('/:token', async (req, res) => {
       .replace(/\[mgmt_hash:[^\]]+\]/g, '')
       .replace(/\[mgmt_enc:[^\]]+\]/g, '')
       .trim();
-    const managementUrl = `${(config.frontendUrl || 'https://bookup-in.vercel.app').replace(/\/$/, '')}/manage/${encodeURIComponent(token)}`;
+    const managementUrl = `${(config.frontendUrl || 'https://calup-in.vercel.app').replace(/\/$/, '')}/manage/${encodeURIComponent(token)}`;
 
     // Return sanitized customer-facing projection (no internal keys or user IDs)
     return res.json({

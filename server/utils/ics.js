@@ -101,7 +101,7 @@ export function generateIcsCalendar({
   const dtStart = formatUtcIcs(startDate);
   const dtEnd = formatUtcIcs(endDate);
 
-  const uid = bookingId ? `${bookingId}@bookup-in.vercel.app` : `${crypto.randomUUID()}@bookup-in.vercel.app`;
+  const uid = bookingId ? `${bookingId}@calup-in.vercel.app` : `${crypto.randomUUID()}@calup-in.vercel.app`;
   const summary = `${serviceName} with ${providerName}`;
 
   const descriptionLines = [
@@ -117,7 +117,7 @@ export function generateIcsCalendar({
   const rawLines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//CalUp//Appointment Booking//EN',
+    'PRODID:-//Calup//Appointment Booking//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:REQUEST',
     'BEGIN:VEVENT',

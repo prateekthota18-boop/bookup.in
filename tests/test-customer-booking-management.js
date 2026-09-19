@@ -360,8 +360,8 @@ async function runComprehensiveSuite() {
     // [TEST J] VERCEL DEEP-LINK COMPATIBILITY & ROUTING
     // -------------------------------------------------------------------------
     console.log('\n--- [TEST J] VERCEL DEEP-LINK & PRODUCTION ROUTE COMPATIBILITY ---');
-    const prodUrl = `https://bookup-in.vercel.app/manage/${tokenB}`;
-    assert(prodUrl.startsWith('https://bookup-in.vercel.app/manage/'), 'URL is formatted as production /manage/<token>');
+    const prodUrl = `https://calup-in.vercel.app/manage/${tokenB}`;
+    assert(prodUrl.startsWith('https://calup-in.vercel.app/manage/'), 'URL is formatted as production /manage/<token>');
     const res22 = await fetch(`${API_BASE}/public/bookings/manage/${tokenB}`);
     assert(res22.status === 200, 'Production-style management token resolves appointment data');
 

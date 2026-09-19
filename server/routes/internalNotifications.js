@@ -105,7 +105,7 @@ export async function processReminders() {
 
   results.totalCandidates = candidates.length;
   const nowMs = Date.now();
-  const frontendBase = (config.frontendUrl || 'https://bookup-in.vercel.app').replace(/\/$/, '');
+  const frontendBase = (config.frontendUrl || 'https://calup-in.vercel.app').replace(/\/$/, '');
 
   for (const booking of candidates) {
     try {
@@ -228,6 +228,7 @@ export async function processReminders() {
         }
       } else {
         results.failed++;
+        console.error(`[InternalNotifications] Reminder email failed. Provider: "${providerName}", Recipient: "${recipientEmail}", Error: ${sendRes.error}`);
         results.details.push({ id: booking.id, status: 'failed', error: sendRes.error });
 
         try {
@@ -236,6 +237,7 @@ export async function processReminders() {
       }
     } catch (itemErr) {
       results.failed++;
+      console.error(`[InternalNotifications] Reminder email exception. Provider: "${booking.providers?.name || 'Coach'}", Recipient: "${booking.customer_email}", Error: ${itemErr.message || itemErr}`);
       results.details.push({ id: booking.id, status: 'error', error: itemErr.message });
     }
   }

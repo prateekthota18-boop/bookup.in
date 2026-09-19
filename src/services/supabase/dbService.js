@@ -3,7 +3,7 @@
  * Authoritative data layer for providers, services, availability, bookings, and policies.
  */
 
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { hashManagementToken } from '../../utils/token.js';
 
 const DAYS_LIST = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -1027,9 +1027,8 @@ export const dbService = {
     return result;
   },
 
-  async rejectPayment(bookingId, reason) {
+  async rejectPayment(bookingId, reason = '') {
     if (!bookingId) throw new Error('Booking ID is required');
-    if (!reason || !reason.trim()) throw new Error('A reason for rejection is required');
 
     if (!isSupabaseConfigured()) {
       return { success: true, booking: { id: bookingId, paymentStatus: 'rejected', status: 'cancelled' } };
@@ -1053,7 +1052,7 @@ export const dbService = {
         Accept: 'application/json',
         ...authHeaders,
       },
-      body: JSON.stringify({ reason: reason.trim() }),
+      body: JSON.stringify({ reason: typeof reason === 'string' ? reason.trim() : '' }),
     });
 
     const result = await res.json().catch(() => ({}));

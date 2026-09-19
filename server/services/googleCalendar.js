@@ -260,18 +260,22 @@ export const googleCalendarService = {
    * Create an appointment event in Google Calendar
    */
   async createEvent(providerId, booking, timeZone = 'Asia/Kolkata') {
+    const providerIdentifier = booking.providerName || providerId || 'unknown-provider';
+    const recipientIdentifier = booking.customerEmail || booking.customerName || 'unknown-recipient';
+
     const accessToken = await this.getValidAccessToken(providerId);
     if (!accessToken) {
-      return { success: false, reason: 'not_connected' };
+      console.error(`[GoogleCalendarService] Failed to create Google Calendar event. Provider: "${providerIdentifier}", Recipient: "${recipientIdentifier}", Error: Google Calendar not connected or access token missing.`);
+      return { success: false, reason: 'not_connected', error: 'Google Calendar not connected for provider' };
     }
 
     const offset = getTimezoneOffsetString(booking.date, timeZone);
     const startDateTime = `${booking.date}T${booking.startTime}:00${offset}`;
     const endDateTime = `${booking.date}T${booking.endTime}:00${offset}`;
 
-    const summary = `${booking.serviceName} — ${booking.customerName} (CalUp)`;
+    const summary = `${booking.serviceName} — ${booking.customerName} (Calup)`;
     const description = [
-      `CalUp Appointment`,
+      `Calup Appointment`,
       `Service: ${booking.serviceName} (${booking.duration} mins)`,
       `Client: ${booking.customerName}`,
       `Phone: ${booking.customerPhone}`,
@@ -320,7 +324,7 @@ export const googleCalendarService = {
 
       if (!res.ok) {
         const errText = await res.text();
-        console.error('Failed to create Google Calendar event:', errText);
+        console.error(`[GoogleCalendarService] Google Calendar event creation API error. Provider: "${providerIdentifier}", Recipient: "${recipientIdentifier}", Error: ${errText}`);
         return { success: false, error: errText };
       }
 
@@ -346,8 +350,8 @@ export const googleCalendarService = {
         meetLink,
       };
     } catch (err) {
-      console.error('Google Calendar event creation failed:', err.message);
-      return { success: false, error: err.message };
+      console.error(`[GoogleCalendarService] Google Calendar event creation exception. Provider: "${providerIdentifier}", Recipient: "${recipientIdentifier}", Error: ${err.message || err}`);
+      return { success: false, error: err.message || String(err) };
     }
   },
 

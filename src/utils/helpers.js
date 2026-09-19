@@ -114,8 +114,14 @@ export function generateTimeSlotsDetailed(
     if (excludeBookingId && b.id === excludeBookingId) {
       continue;
     }
-    // Cancelled and no-show bookings do not block calendar time
-    if (b.status === 'cancelled' || b.status === 'late-cancellation' || b.status === 'no-show') {
+    // Cancelled, no-show, and payment rejected bookings do not block calendar time
+    if (
+      b.status === 'cancelled' ||
+      b.status === 'late-cancellation' ||
+      b.status === 'no-show' ||
+      b.paymentStatus === 'rejected' ||
+      b.payment_status === 'rejected'
+    ) {
       continue;
     }
 

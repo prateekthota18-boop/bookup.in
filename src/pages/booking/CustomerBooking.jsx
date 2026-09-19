@@ -289,11 +289,11 @@ export default function CustomerBooking() {
   const isPaidService = (resolvedBooking?.price || 0) > 0;
   const rawPaymentStatus = resolvedBooking?.paymentStatus;
   let paymentStatus = rawPaymentStatus || (isPaidService ? 'awaiting_payment' : 'not_required');
-  if (isRetryingPayment) {
+  if (isRetryingPayment && rawPaymentStatus !== 'rejected') {
     paymentStatus = 'awaiting_payment';
   }
 
-  const isConfirmed = resolvedBooking.status === 'confirmed';
+  const isConfirmed = resolvedBooking.status === 'confirmed' && paymentStatus !== 'rejected';
   const isCancelled = resolvedBooking.status === 'cancelled' || resolvedBooking.status === 'late-cancellation';
   const isCompleted = resolvedBooking.status === 'completed';
 
@@ -311,7 +311,7 @@ export default function CustomerBooking() {
 
   if (paymentStatus === 'rejected') {
     celebrateBadge = '⚠️';
-    heroHeadline = "Payment couldn't be verified";
+    heroHeadline = "Payment could not be verified";
     heroSubline = `Your payment submission could not be verified by ${providerName}.`;
     statusBadgeText = 'Payment Rejected';
     statusBadgeStyle = { background: '#FEE2E2', color: '#991B1B', border: '1px solid #FECACA' };
@@ -702,49 +702,81 @@ export default function CustomerBooking() {
               {/* 4. Payment Rejected */}
               {paymentStatus === 'rejected' && (
                 <div style={{
-                  padding: '16px 20px',
+                  padding: '20px',
                   background: 'var(--color-error-50, #FEF2F2)',
                   border: '1px solid var(--color-error-200, #FECACA)',
                   borderRadius: '16px',
-                  marginBottom: 'var(--space-3)',
+                  marginBottom: 'var(--space-4)',
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '16px' }}>❌</span>
-                    <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-error-800, #991B1B)' }}>Payment Could Not Be Verified</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '18px' }}>⚠️</span>
+                    <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-error-800, #991B1B)' }}>
+                      Payment could not be verified
+                    </span>
                   </div>
-                  <p style={{ fontSize: '13px', color: 'var(--color-error-700, #B91C1C)', margin: '0 0 10px 0', lineHeight: 1.5 }}>
-                    Your coach could not verify your payment. The reserved slot was released.
+                  <p style={{ fontSize: '13.5px', color: 'var(--color-error-700, #B91C1C)', margin: '0 0 12px 0', lineHeight: 1.5 }}>
+                    Your payment could not be verified by <strong>{providerName}</strong>, and the reserved time slot has been released.
                   </p>
                   {resolvedBooking.paymentRejectedReason && (
                     <div style={{
                       fontSize: '13px',
-                      color: 'var(--color-error-800)',
+                      color: 'var(--color-error-800, #991B1B)',
                       background: '#FEE2E2',
+                      border: '1px solid #FCA5A5',
                       borderRadius: '8px',
-                      padding: '10px 12px',
-                      marginBottom: '14px',
+                      padding: '10px 14px',
+                      marginBottom: '16px',
                     }}>
                       <strong>Reason from coach:</strong> {resolvedBooking.paymentRejectedReason}
                     </div>
                   )}
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    <PillButton
-                      variant="primary"
-                      onClick={() => setIsRetryingPayment(true)}
-                      style={{ flex: 1, minWidth: '130px', justifyContent: 'center' }}
-                    >
-                      Retry Payment
-                    </PillButton>
-                    {(provider?.phone || provider?.email) && (
-                      <a
-                        href={provider?.phone ? `tel:${provider.phone}` : `mailto:${provider.email}`}
-                        style={{ textDecoration: 'none', flex: 1, minWidth: '130px' }}
-                      >
-                        <PillButton variant="secondary" style={{ width: '100%', justifyContent: 'center' }}>
-                          Contact Coach
-                        </PillButton>
-                      </a>
-                    )}
+
+                  {/* Coach Contact Details Card */}
+                  <div style={{
+                    background: '#FFFFFF',
+                    border: '1px solid #FECACA',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    marginTop: '8px',
+                  }}>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B', marginBottom: '12px' }}>
+                      Coach Contact Details
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13.5px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#64748B' }}>Coach</span>
+                        <span style={{ fontWeight: 600, color: '#0F172A' }}>{providerName}</span>
+                      </div>
+                      {provider?.email && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#64748B' }}>Email</span>
+                          <a href={`mailto:${provider.email}`} style={{ color: '#2563EB', fontWeight: 500, textDecoration: 'none' }}>
+                            {provider.email}
+                          </a>
+                        </div>
+                      )}
+                      {provider?.phone && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#64748B' }}>Phone</span>
+                          <a href={`tel:${provider.phone}`} style={{ color: '#2563EB', fontWeight: 500, textDecoration: 'none' }}>
+                            {provider.phone}
+                          </a>
+                        </div>
+                      )}
+                      {(provider?.whatsapp || provider?.phone) && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#64748B' }}>WhatsApp</span>
+                          <a
+                            href={`https://wa.me/${(provider.whatsapp || provider.phone).replace(/[^0-9]/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: '#16A34A', fontWeight: 600, textDecoration: 'none' }}
+                          >
+                            Chat on WhatsApp ↗
+                          </a>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
