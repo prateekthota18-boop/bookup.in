@@ -125,14 +125,14 @@ export function generateTimeSlotsDetailed(
       continue;
     }
 
-    const bStart = timeToMinutes(b.startTime);
+    const bStart = timeToMinutes(b.startTime || b.start_time);
     let bEnd;
 
-    if (b.status === 'completed' && b.actualEndTime) {
+    if (b.status === 'completed' && (b.actualEndTime || b.actual_end_time)) {
       // Early completion auto-release: use actual end time + buffer
-      bEnd = timeToMinutes(b.actualEndTime);
-    } else if (b.endTime) {
-      bEnd = timeToMinutes(b.endTime);
+      bEnd = timeToMinutes(b.actualEndTime || b.actual_end_time);
+    } else if (b.endTime || b.end_time) {
+      bEnd = timeToMinutes(b.endTime || b.end_time);
     } else {
       bEnd = bStart + (Number(b.duration) || durationNum);
     }
@@ -263,8 +263,8 @@ export function getTimeSlotsDetailedForDate(
   const service = services.find(s => s.id === serviceId);
   if (!service) return [];
 
-  // Filter bookings for this date
-  const dayBookings = allBookings.filter(b => b.date === dateStr);
+  // Filter bookings for this date (support .date, .booking_date, or pre-filtered date-specific busy slots)
+  const dayBookings = allBookings.filter(b => (!b.date && !b.booking_date) ? true : (b.date === dateStr || b.booking_date === dateStr));
 
   return generateTimeSlotsDetailed(
     daySchedule.start,

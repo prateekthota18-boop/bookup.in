@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore, formatCurrency, formatDate, formatTime, generateId } from '../../data/store';
 import { ACTIONS } from '../../data/actions';
@@ -110,22 +110,36 @@ export default function PublicBookingPage() {
 
   // Live busy times
   const [liveGcalBusyTimes, setLiveGcalBusyTimes] = useState([]);
+  const [liveDbBusySlots, setLiveDbBusySlots] = useState([]);
 
-  useEffect(() => {
-    let isMounted = true;
-    if (isDemo) return;
+  const fetchDateBusySlots = useCallback((date, provId, timezone) => {
+    if (!date || !provId) return;
 
-    if (selectedDate && provider?.id) {
-      realGoogleCalendarService.getBusyTimes(selectedDate, provider.id, provider.timezone || 'Asia/Kolkata').then(times => {
-        if (isMounted && Array.isArray(times)) {
-          setLiveGcalBusyTimes(times);
-        }
-      }).catch(err => {
+    // 1. Google Calendar busy times
+    realGoogleCalendarService.getBusyTimes(date, provId, timezone || 'Asia/Kolkata')
+      .then(times => {
+        if (Array.isArray(times)) setLiveGcalBusyTimes(times);
+      })
+      .catch(err => {
         console.warn('Could not fetch calendar busy times:', err.message);
       });
+
+    // 2. Database busy slots (Calup confirmed bookings)
+    dbService.getBusySlots(provId, date)
+      .then(slots => {
+        if (Array.isArray(slots)) setLiveDbBusySlots(slots);
+      })
+      .catch(err => {
+        console.warn('Could not fetch database busy slots:', err.message);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (isDemo) return;
+    if (selectedDate && provider?.id) {
+      fetchDateBusySlots(selectedDate, provider.id, provider.timezone);
     }
-    return () => { isMounted = false; };
-  }, [isDemo, selectedDate, provider?.id, provider?.timezone]);
+  }, [isDemo, selectedDate, provider?.id, provider?.timezone, fetchDateBusySlots]);
 
   const calendarBusyTimes = useMemo(() => {
     if (isDemo) {
@@ -139,11 +153,23 @@ export default function PublicBookingPage() {
 
   const timeSlotsDetailed = useMemo(() => {
     if (!selectedDate || !selectedService) return [];
-    const bookingsToCheck = (supabaseData?.bookings && supabaseData.bookings.length > 0)
-      ? supabaseData.bookings
-      : ((state.bookings && state.bookings.length > 0)
-        ? state.bookings
-        : (demoFallback?.bookings || []));
+
+    // Format database busy slots as bookings with date and times
+    const formattedDbBookings = liveDbBusySlots.map(s => ({
+      date: selectedDate,
+      startTime: s.start_time,
+      endTime: s.end_time,
+      actualEndTime: s.actual_end_time,
+      status: 'confirmed',
+    }));
+
+    const bookingsToCheck = [
+      ...formattedDbBookings,
+      ...(supabaseData?.bookings || []),
+      ...(state.bookings || []),
+      ...(demoFallback?.bookings || []),
+    ];
+
     return getTimeSlotsDetailedForDate(
       selectedDate,
       availability,
@@ -152,7 +178,7 @@ export default function PublicBookingPage() {
       bookingsToCheck,
       calendarBusyTimes
     );
-  }, [selectedDate, selectedService, availability, services, supabaseData, state.bookings, demoFallback?.bookings, calendarBusyTimes]);
+  }, [selectedDate, selectedService, availability, services, liveDbBusySlots, supabaseData?.bookings, state.bookings, demoFallback?.bookings, calendarBusyTimes]);
 
   const timeSlots = useMemo(() => {
     return timeSlotsDetailed.filter(s => s.available).map(s => s.time);
@@ -281,15 +307,32 @@ export default function PublicBookingPage() {
         setSubmittingBooking(false);
 
         const rawMsg = err.message || '';
-        let userFacingError = 'Could not complete your booking. Please try again.';
-        if (
-          rawMsg.toLowerCase().includes('slot') ||
+        const isConflict =
+          err.status === 409 ||
+          err.isConflict ||
           rawMsg.toLowerCase().includes('no longer available') ||
           rawMsg.toLowerCase().includes('conflict') ||
-          rawMsg.includes('409')
-        ) {
-          userFacingError = 'This time slot was just booked by someone else. Please go back and pick another time.';
-        } else if (rawMsg.toLowerCase().includes('unable to reach') || rawMsg.toLowerCase().includes('network')) {
+          rawMsg.includes('409') ||
+          rawMsg.toLowerCase().includes('was just booked') ||
+          rawMsg.toLowerCase().includes('slot');
+
+        if (isConflict) {
+          // 1. Refetch busy slots for selectedDate from database & calendar
+          if (selectedDate && provider?.id) {
+            fetchDateBusySlots(selectedDate, provider.id, provider.timezone);
+          }
+          // 2. Send customer back to time picker (Step 2) with that slot removed
+          setCurrentStep(2);
+          setSelectedTime(null);
+          // 3. Show "That time was just taken, please pick another."
+          const conflictMsg = 'That time was just taken, please pick another.';
+          setBookingError(conflictMsg);
+          addToast(conflictMsg, 'error');
+          return;
+        }
+
+        let userFacingError = 'Could not complete your booking. Please try again.';
+        if (rawMsg.toLowerCase().includes('unable to reach') || rawMsg.toLowerCase().includes('network')) {
           userFacingError = 'Unable to reach the booking server. Please check your connection and try again.';
         } else if (rawMsg.trim()) {
           userFacingError = rawMsg;
@@ -297,12 +340,6 @@ export default function PublicBookingPage() {
 
         setBookingError(userFacingError);
         addToast(userFacingError, 'error');
-
-        if (slug) {
-          dbService.getPublicBookingData(slug).then(d => {
-            if (d) setSupabaseData(d);
-          }).catch(() => {});
-        }
         return;
       }
     }

@@ -345,7 +345,7 @@ router.post('/:id/confirm-payment', requireProviderAuth, async (req, res) => {
           notes: booking.notes || '',
         };
 
-        const gcalProviderId = booking.provider_id || providerId;
+        const gcalProviderId = booking.provider_id || req.providerId || providerId;
         const gcalRes = await googleCalendarService.createEvent(
           gcalProviderId,
           gcalBooking,
@@ -363,11 +363,13 @@ router.post('/:id/confirm-payment', requireProviderAuth, async (req, res) => {
           } catch (_e) {
             console.warn('[PaymentVerification] Could not persist google_event_id/meet_link to bookings:', _e.message);
           }
-        } else if (!gcalRes?.success) {
-          console.error(`[PaymentVerification] Google Calendar event creation failed. Provider: "${providerName}" (${gcalProviderId}), Recipient: "${booking.customer_name}" (${booking.customer_email || 'no email'}), Error: ${gcalRes?.error || gcalRes?.reason || 'Unknown calendar error'}`);
+          console.log(`[PaymentVerification] Google Calendar event created successfully with Google Meet link. Provider: "${providerName}" (${gcalProviderId}), Event ID: ${googleEventId}, Meet Link: ${meetLink || 'none'}`);
+        } else {
+          const reason = gcalRes?.reason || 'api_error';
+          console.error(`[PaymentVerification] Google Calendar event creation failed. Reason: "${reason}". Provider: "${providerName}" (${gcalProviderId}), Recipient: "${booking.customer_name}" (${booking.customer_email || 'no email'}), Details: ${gcalRes?.error || 'Unknown calendar error'}`);
         }
       } catch (gcalErr) {
-        console.error(`[PaymentVerification] Google Calendar event creation exception. Provider: "${providerName}" (${providerId}), Recipient: "${booking.customer_name}" (${booking.customer_email || 'no email'}), Error: ${gcalErr.message || gcalErr}`);
+        console.error(`[PaymentVerification] Google Calendar event creation exception. Reason: "api_error". Provider: "${providerName}" (${providerId}), Recipient: "${booking.customer_name}" (${booking.customer_email || 'no email'}), Error: ${gcalErr.message || gcalErr}`);
       }
     }
 
@@ -441,8 +443,31 @@ router.post('/:id/confirm-payment', requireProviderAuth, async (req, res) => {
     }
 
     // 5. Non-blocking email confirmation notification to coach (with client details and Meet link)
-    const coachEmail = provider.email || booking.providers?.email;
-    if (coachEmail) {
+    // Recipient hierarchy: provider.email -> booking.providers?.email -> req.provider?.email -> req.user?.email (auth fallback)
+    const effectiveCoachProviderId = booking.provider_id || req.providerId || provider.id || 'unknown-provider';
+    let coachEmail = provider.email || booking.providers?.email || req.provider?.email || req.user?.email;
+
+    if (!coachEmail && supabase) {
+      try {
+        const { data: directProv } = await supabase
+          .from('providers')
+          .select('email, user_id')
+          .eq('id', effectiveCoachProviderId)
+          .maybeSingle();
+        if (directProv?.email) {
+          coachEmail = directProv.email;
+        } else if (directProv?.user_id && supabase.auth?.admin?.getUserById) {
+          const { data: authUser } = await supabase.auth.admin.getUserById(directProv.user_id);
+          if (authUser?.user?.email) {
+            coachEmail = authUser.user.email;
+          }
+        }
+      } catch (_lookupErr) {}
+    }
+
+    if (!coachEmail) {
+      console.error(`[PaymentVerification] Coach confirmation email recipient missing. Cannot send confirmation to coach. Provider ID: "${effectiveCoachProviderId}"`);
+    } else {
       try {
         const coachEmailRes = await emailService.sendCoachBookingConfirmedEmail({
           to: coachEmail,

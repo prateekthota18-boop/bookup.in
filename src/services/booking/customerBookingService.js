@@ -40,7 +40,10 @@ export const customerBookingService = {
     }
 
     // Never fall back to direct client Supabase insert: booking creation must always go through backend API.
-    throw new Error(result.error || result.details || 'Could not complete your booking. Please try again.');
+    const err = new Error(result.error || result.details || 'Could not complete your booking. Please try again.');
+    err.status = res.status;
+    err.isConflict = res.status === 409;
+    throw err;
   },
 
   /**

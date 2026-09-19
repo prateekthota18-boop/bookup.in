@@ -242,11 +242,15 @@ async function runEmailFlowTests() {
   });
 
   assert(
-    capturedCustNoMeetMail.html.includes('share the link') ||
-    capturedCustNoMeetMail.text.includes('share the link'),
-    'Fallback message indicates coach will share the link when Google Calendar is not connected'
+    capturedCustNoMeetMail.html.includes('Your coach will share the meeting link before the session.') &&
+    capturedCustNoMeetMail.text.includes('Your coach will share the meeting link before the session.'),
+    'Fallback message indicates coach will share the meeting link before the session'
   );
-  console.log('  ✓ Customer confirmation email verified (Meet link, .ics attachment, manage link, and fallback when no Meet link)');
+  assert(
+    !capturedCustNoMeetMail.html.includes('Your coach has not connected Google Calendar yet'),
+    'Does not expose internal Google Calendar setup status to customers'
+  );
+  console.log('  ✓ Customer confirmation email verified (Meet link, .ics attachment, manage link, and friendly meeting link fallback)');
 
   // 4c. Coach confirmation with client details and Meet link
   let capturedCoachConfirmMail = null;

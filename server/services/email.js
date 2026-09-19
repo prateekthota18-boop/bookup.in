@@ -94,7 +94,7 @@ export class EmailService {
              </a>
            </div>
            <p style="font-size: 13px; color: #64748b; margin-top: 4px;">Meeting link: <a href="${meetLink}" style="color: #2563eb;">${meetLink}</a></p>`
-        : `<p style="margin: 16px 0; color: #64748b; font-size: 14px;"><em>Your coach has not connected Google Calendar yet. The coach will share the link prior to the session.</em></p>`;
+        : `<p style="margin: 16px 0; color: #64748b; font-size: 14px;"><em>Your coach will share the meeting link before the session.</em></p>`;
 
       const manageSection = managementUrl
         ? `<div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 14px; color: #64748b;">
@@ -164,7 +164,7 @@ Hi ${customerName || 'there'}, your appointment has been confirmed:
 - Coach: ${providerName}
 - Date: ${bookingDate}
 - Time: ${startTime} (${duration} mins)
-${meetLink ? `- Google Meet Link: ${meetLink}` : '- Your coach will share the link prior to the session.'}
+${meetLink ? `- Google Meet Link: ${meetLink}` : '- Your coach will share the meeting link before the session.'}
 ${managementUrl ? `- Manage Appointment: ${managementUrl}` : ''}
 
 A calendar invite (.ics) has been attached to this email.

@@ -914,15 +914,41 @@ export const dbService = {
    * Get provider busy time intervals without exposing customer PII
    */
   async getBusySlots(providerId, date) {
-    if (!isSupabaseConfigured() || !providerId || !date) return [];
+    if (!providerId || !date) return [];
+
+    // 1. Fetch from backend endpoint (service-role backed, highly reliable)
     try {
-      const { data, error } = await supabase.rpc('get_provider_busy_slots', {
-        p_provider_id: providerId,
-        p_booking_date: date,
-      });
-      if (!error && Array.isArray(data)) return data;
-    } catch {
-      // Fallback
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}/public/busy-slots?providerId=${encodeURIComponent(providerId)}&date=${encodeURIComponent(date)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.busySlots)) {
+          return json.busySlots;
+        }
+      }
+    } catch (_err) {
+      // Non-blocking fallback to RPC
+    }
+
+    // 2. Fallback to Supabase RPC if backend is not reachable
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase.rpc('get_provider_busy_slots', {
+          p_provider_id: providerId,
+          p_booking_date: date,
+        });
+        if (!error && Array.isArray(data)) {
+          return data
+            .filter(b => b.payment_status !== 'rejected')
+            .map(b => ({
+              start_time: b.start_time,
+              end_time: b.end_time,
+              actual_end_time: b.actual_end_time || null,
+            }));
+        }
+      } catch {
+        // Fallback
+      }
     }
     return [];
   },

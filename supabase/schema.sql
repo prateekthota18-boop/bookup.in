@@ -248,7 +248,8 @@ as $$
   from public.bookings
   where provider_id = p_provider_id
     and booking_date = p_booking_date
-    and status in ('confirmed', 'completed');
+    and status in ('confirmed', 'completed')
+    and coalesce(payment_status, '') != 'rejected';
 $$;
 
 grant execute on function public.get_provider_busy_slots(uuid, date) to anon, authenticated, service_role;
@@ -317,6 +318,7 @@ begin
   where provider_id = p_provider_id
     and booking_date = p_booking_date
     and status in ('confirmed', 'completed')
+    and coalesce(payment_status, '') != 'rejected'
     and (
       v_cand_start < (
         (split_part(coalesce(actual_end_time, end_time), ':', 1)::integer * 60) +

@@ -189,13 +189,13 @@ async function handleCreateBooking(req, res) {
     try {
       const { data: ebData, error: ebErr } = await supabase
         .from('bookings')
-        .select('id, start_time, end_time, actual_end_time, status')
+        .select('id, start_time, end_time, actual_end_time, status, payment_status')
         .eq('provider_id', providerId)
         .eq('booking_date', bookingDate)
         .in('status', ['confirmed', 'completed']);
 
       if (!ebErr && Array.isArray(ebData)) {
-        existingBookings = ebData;
+        existingBookings = ebData.filter(b => b.payment_status !== 'rejected');
       } else if (ebErr) {
         console.warn('[PublicBookings] Direct bookings table select restricted, trying get_provider_busy_slots RPC:', ebErr.message);
       }
@@ -209,7 +209,7 @@ async function handleCreateBooking(req, res) {
           p_booking_date: bookingDate,
         });
         if (!rpcErr && Array.isArray(rpcSlots)) {
-          existingBookings = rpcSlots;
+          existingBookings = rpcSlots.filter(b => b.payment_status !== 'rejected');
         }
       } catch (_rpcErr) {}
     }
@@ -558,6 +558,57 @@ router.post('/', handleCreateBooking);
 router.post('/create', handleCreateBooking);
 
 /**
+ * GET /api/public/busy-slots?providerId=&date=
+ * or GET /api/public/bookings/busy-slots?providerId=&date=
+ * Returns sanitized busy time intervals for public slot calculation.
+ * Exposes strictly: start_time, end_time, actual_end_time.
+ * Strictly excludes payment_status = 'rejected' and cancelled appointments.
+ * Never exposes customer name, email, phone, or notes.
+ */
+router.get('/busy-slots', async (req, res) => {
+  const { providerId, date } = req.query;
+
+  if (!providerId || !date) {
+    return res.status(400).json({ success: false, error: 'providerId and date are required query parameters' });
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return res.status(503).json({ success: false, error: 'Database service is unavailable' });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('start_time, end_time, actual_end_time, status, payment_status')
+      .eq('provider_id', providerId)
+      .eq('booking_date', date)
+      .in('status', ['confirmed', 'completed']);
+
+    if (error) {
+      console.error('[PublicBookings] Error fetching busy slots:', error.message);
+      return res.status(500).json({ success: false, error: 'Failed to fetch busy slots' });
+    }
+
+    const busySlots = (data || [])
+      .filter(b => b.payment_status !== 'rejected')
+      .map(b => ({
+        start_time: b.start_time,
+        end_time: b.end_time,
+        actual_end_time: b.actual_end_time || null,
+      }));
+
+    return res.json({
+      success: true,
+      busySlots,
+    });
+  } catch (err) {
+    console.error('[PublicBookings] Exception in busy-slots:', err.message);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+/**
  * GET /api/public/bookings/manage/:token
  * Validates token and returns sanitized appointment projection.
  */
@@ -740,7 +791,7 @@ router.post('/:token/reschedule', async (req, res) => {
     // 1. Authoritative overlap conflict check against other confirmed bookings
     const { data: existingBookings, error: ebErr } = await supabase
       .from('bookings')
-      .select('id, start_time, end_time, actual_end_time, status')
+      .select('id, start_time, end_time, actual_end_time, status, payment_status')
       .eq('provider_id', providerId)
       .eq('booking_date', newDate)
       .neq('id', booking.id)
@@ -748,10 +799,12 @@ router.post('/:token/reschedule', async (req, res) => {
 
     if (ebErr) throw ebErr;
 
+    const validExistingBookings = (existingBookings || []).filter(b => b.payment_status !== 'rejected');
+
     const candStart = startMin;
     const candEnd = endMin + buffer;
 
-    const hasConflict = existingBookings?.some(eb => {
+    const hasConflict = validExistingBookings.some(eb => {
       const ebStart = eb.start_time ? Number(eb.start_time.split(':')[0]) * 60 + Number(eb.start_time.split(':')[1]) : 0;
       const ebEndRaw = eb.actual_end_time || eb.end_time;
       const ebEnd = ebEndRaw ? Number(ebEndRaw.split(':')[0]) * 60 + Number(ebEndRaw.split(':')[1]) : ebStart + 60;

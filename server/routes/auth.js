@@ -106,9 +106,9 @@ router.get('/callback', async (req, res) => {
  * Check if the authenticated provider has an active Google Calendar integration
  * Authenticated provider only: resolves provider strictly from Supabase Auth session
  */
-router.get('/status', requireProviderAuth, (req, res) => {
+router.get('/status', requireProviderAuth, async (req, res) => {
   const providerId = req.providerId;
-  const status = tokenStore.getStatus(providerId);
+  const status = await tokenStore.getStatus(providerId);
   res.json({ success: true, ...status });
 });
 

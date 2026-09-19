@@ -110,7 +110,7 @@ export const googleCalendarService = {
 
     // Save tokens securely
     const expiresAt = Date.now() + (expires_in || 3600) * 1000;
-    tokenStore.saveTokens(providerId, {
+    await tokenStore.saveTokens(providerId, {
       email: userEmail,
       accessToken: access_token,
       refreshToken: refresh_token,
@@ -122,24 +122,40 @@ export const googleCalendarService = {
   },
 
   /**
-   * Get valid access token, auto-refreshing if expired
+   * Return valid token details or explicit failure reason:
+   * 'not_connected' | 'token_refresh_failed'
    */
-  async getValidAccessToken(providerId) {
-    const tokens = tokenStore.getDecryptedTokens(providerId);
+  async getValidTokenDetails(providerId) {
+    const tokens = await tokenStore.getDecryptedTokens(providerId);
     if (!tokens || !tokens.accessToken) {
-      return null;
+      return {
+        success: false,
+        accessToken: null,
+        reason: 'not_connected',
+        error: `Google Calendar is not connected for provider ${providerId}`,
+      };
     }
 
     // Check if token expires within 5 minutes
     const isExpired = Date.now() >= tokens.expiresAt - 5 * 60 * 1000;
     if (!isExpired) {
-      return tokens.accessToken;
+      return {
+        success: true,
+        accessToken: tokens.accessToken,
+        reason: null,
+        error: null,
+      };
     }
 
     // Attempt token refresh
     if (!tokens.refreshToken) {
-      console.warn(`No refresh token available for ${providerId}. User must re-authenticate.`);
-      return null;
+      console.warn(`[GoogleCalendarService] No refresh token available for ${providerId}. User must re-authenticate.`);
+      return {
+        success: false,
+        accessToken: null,
+        reason: 'token_refresh_failed',
+        error: `Access token expired and no refresh token is stored for provider ${providerId}`,
+      };
     }
 
     try {
@@ -156,24 +172,52 @@ export const googleCalendarService = {
 
       if (!refreshRes.ok) {
         const errData = await refreshRes.json().catch(() => ({}));
+        const errMsg = errData.error_description || errData.error || `HTTP ${refreshRes.status}`;
         if (errData.error === 'invalid_grant') {
-          // Refresh token has been revoked by user or expired
-          console.warn(`Refresh token revoked for provider ${providerId}. Disconnecting.`);
-          tokenStore.deleteTokens(providerId);
-          return null;
+          console.warn(`[GoogleCalendarService] Refresh token revoked or invalid for provider ${providerId}. Disconnecting.`);
+          await tokenStore.deleteTokens(providerId);
+          return {
+            success: false,
+            accessToken: null,
+            reason: 'token_refresh_failed',
+            error: `Refresh token revoked or expired (invalid_grant): ${errMsg}`,
+          };
         }
-        throw new Error(`Token refresh failed: ${errData.error_description || 'Unknown error'}`);
+        return {
+          success: false,
+          accessToken: null,
+          reason: 'token_refresh_failed',
+          error: `Token refresh failed with status ${refreshRes.status}: ${errMsg}`,
+        };
       }
 
       const refreshed = await refreshRes.json();
       const newExpiresAt = Date.now() + (refreshed.expires_in || 3600) * 1000;
-      tokenStore.updateAccessToken(providerId, refreshed.access_token, newExpiresAt);
+      await tokenStore.updateAccessToken(providerId, refreshed.access_token, newExpiresAt);
 
-      return refreshed.access_token;
+      return {
+        success: true,
+        accessToken: refreshed.access_token,
+        reason: null,
+        error: null,
+      };
     } catch (err) {
-      console.error(`Token refresh error for ${providerId}:`, err.message);
-      return null;
+      console.error(`[GoogleCalendarService] Token refresh error for ${providerId}:`, err.message);
+      return {
+        success: false,
+        accessToken: null,
+        reason: 'token_refresh_failed',
+        error: `Token refresh exception: ${err.message}`,
+      };
     }
+  },
+
+  /**
+   * Get valid access token, auto-refreshing if expired
+   */
+  async getValidAccessToken(providerId) {
+    const details = await this.getValidTokenDetails(providerId);
+    return details.success ? details.accessToken : null;
   },
 
   /**
@@ -263,11 +307,14 @@ export const googleCalendarService = {
     const providerIdentifier = booking.providerName || providerId || 'unknown-provider';
     const recipientIdentifier = booking.customerEmail || booking.customerName || 'unknown-recipient';
 
-    const accessToken = await this.getValidAccessToken(providerId);
-    if (!accessToken) {
-      console.error(`[GoogleCalendarService] Failed to create Google Calendar event. Provider: "${providerIdentifier}", Recipient: "${recipientIdentifier}", Error: Google Calendar not connected or access token missing.`);
-      return { success: false, reason: 'not_connected', error: 'Google Calendar not connected for provider' };
+    const tokenDetails = await this.getValidTokenDetails(providerId);
+    if (!tokenDetails.success || !tokenDetails.accessToken) {
+      const reason = tokenDetails.reason || 'not_connected';
+      console.error(`[GoogleCalendarService] Failed to create Google Calendar event. Reason: "${reason}". Provider: "${providerIdentifier}", Recipient: "${recipientIdentifier}", Error: ${tokenDetails.error || 'Google Calendar not connected or access token missing.'}`);
+      return { success: false, reason, error: tokenDetails.error || 'Google Calendar not connected for provider' };
     }
+
+    const accessToken = tokenDetails.accessToken;
 
     const offset = getTimezoneOffsetString(booking.date, timeZone);
     const startDateTime = `${booking.date}T${booking.startTime}:00${offset}`;
@@ -324,8 +371,8 @@ export const googleCalendarService = {
 
       if (!res.ok) {
         const errText = await res.text();
-        console.error(`[GoogleCalendarService] Google Calendar event creation API error. Provider: "${providerIdentifier}", Recipient: "${recipientIdentifier}", Error: ${errText}`);
-        return { success: false, error: errText };
+        console.error(`[GoogleCalendarService] Google Calendar event creation API error. Reason: "api_error". Provider: "${providerIdentifier}", Recipient: "${recipientIdentifier}", Error: ${errText}`);
+        return { success: false, reason: 'api_error', error: `Google Calendar API error (${res.status}): ${errText}` };
       }
 
       const eventData = await res.json();
@@ -350,8 +397,8 @@ export const googleCalendarService = {
         meetLink,
       };
     } catch (err) {
-      console.error(`[GoogleCalendarService] Google Calendar event creation exception. Provider: "${providerIdentifier}", Recipient: "${recipientIdentifier}", Error: ${err.message || err}`);
-      return { success: false, error: err.message || String(err) };
+      console.error(`[GoogleCalendarService] Google Calendar event creation exception. Reason: "api_error". Provider: "${providerIdentifier}", Recipient: "${recipientIdentifier}", Error: ${err.message || err}`);
+      return { success: false, reason: 'api_error', error: err.message || String(err) };
     }
   },
 
@@ -361,8 +408,11 @@ export const googleCalendarService = {
   async updateEvent(providerId, eventId, booking, timeZone = 'Asia/Kolkata') {
     if (!eventId) return { success: false, reason: 'missing_event_id' };
 
-    const accessToken = await this.getValidAccessToken(providerId);
-    if (!accessToken) return { success: false, reason: 'not_connected' };
+    const tokenDetails = await this.getValidTokenDetails(providerId);
+    if (!tokenDetails.success || !tokenDetails.accessToken) {
+      return { success: false, reason: tokenDetails.reason || 'not_connected', error: tokenDetails.error };
+    }
+    const accessToken = tokenDetails.accessToken;
 
     const startDateTime = `${booking.date}T${booking.startTime}:00+05:30`;
     const endDateTime = `${booking.date}T${booking.endTime}:00+05:30`;
@@ -382,13 +432,13 @@ export const googleCalendarService = {
 
       if (!res.ok) {
         console.error('Failed to update Google Calendar event:', await res.text());
-        return { success: false };
+        return { success: false, reason: 'api_error' };
       }
 
       return { success: true };
     } catch (err) {
       console.error('Error updating Google Calendar event:', err.message);
-      return { success: false, error: err.message };
+      return { success: false, reason: 'api_error', error: err.message };
     }
   },
 
@@ -398,8 +448,11 @@ export const googleCalendarService = {
   async deleteEvent(providerId, eventId) {
     if (!eventId) return { success: false, reason: 'missing_event_id' };
 
-    const accessToken = await this.getValidAccessToken(providerId);
-    if (!accessToken) return { success: false, reason: 'not_connected' };
+    const tokenDetails = await this.getValidTokenDetails(providerId);
+    if (!tokenDetails.success || !tokenDetails.accessToken) {
+      return { success: false, reason: tokenDetails.reason || 'not_connected', error: tokenDetails.error };
+    }
+    const accessToken = tokenDetails.accessToken;
 
     try {
       const res = await fetch(`${CALENDAR_API_BASE}/calendars/primary/events/${encodeURIComponent(eventId)}`, {
@@ -418,10 +471,10 @@ export const googleCalendarService = {
       }
 
       console.error('Failed to delete Google Calendar event:', await res.text());
-      return { success: false };
+      return { success: false, reason: 'api_error' };
     } catch (err) {
       console.error('Error deleting Google Calendar event:', err.message);
-      return { success: false, error: err.message };
+      return { success: false, reason: 'api_error', error: err.message };
     }
   },
 
@@ -429,7 +482,7 @@ export const googleCalendarService = {
    * Disconnect Google account & revoke token
    */
   async disconnect(providerId) {
-    const tokens = tokenStore.getDecryptedTokens(providerId);
+    const tokens = await tokenStore.getDecryptedTokens(providerId);
     if (tokens?.accessToken) {
       try {
         await fetch(`${GOOGLE_REVOKE_URL}?token=${encodeURIComponent(tokens.accessToken)}`, {
@@ -441,7 +494,7 @@ export const googleCalendarService = {
       }
     }
 
-    tokenStore.deleteTokens(providerId);
+    await tokenStore.deleteTokens(providerId);
     return { success: true };
   }
 };

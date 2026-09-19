@@ -55,6 +55,7 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/auth/google', authRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/public', publicBookingsRoutes);
 app.use('/api/public/bookings', publicBookingsRoutes);
 app.use('/api/public/bookings/manage', publicBookingsRoutes);
 app.use('/api/internal/notifications', internalNotificationsRoutes);
